@@ -36,15 +36,15 @@ export async function POST(req: NextRequest) {
     writeFileSync(texFile, latex);
 
     try {
-      execSync(`cd "${workDir}" && pdflatex -interaction=nonstopmode resume.tex`, {
-        timeout: 30000,
+      execSync(`cd "${workDir}" && pdflatex -interaction=nonstopmode -halt-on-error resume.tex`, {
+        timeout: 60000,
         stdio: "pipe",
       });
 
       // Run twice for references
       if (existsSync(pdfFile)) {
         execSync(`cd "${workDir}" && pdflatex -interaction=nonstopmode resume.tex`, {
-          timeout: 30000,
+          timeout: 60000,
           stdio: "pipe",
         });
       }
@@ -53,15 +53,26 @@ export async function POST(req: NextRequest) {
       if (!existsSync(pdfFile)) {
         const logFile = join(workDir, "resume.log");
         let logContent = "";
+        let errorSummary = "LaTeX compilation failed.";
         if (existsSync(logFile)) {
-          logContent = readFileSync(logFile, "utf-8").slice(-2000);
+          const fullLog = readFileSync(logFile, "utf-8");
+          logContent = fullLog.slice(-2000);
+          // Extract key error lines
+          const errorLines = fullLog
+            .split("\n")
+            .filter((l) => l.startsWith("!") || l.includes("Fatal error") || l.includes("Emergency stop"))
+            .slice(0, 5)
+            .join("\n");
+          if (errorLines) {
+            errorSummary = `LaTeX compilation failed:\n${errorLines}`;
+          }
         }
         // Cleanup
         try {
           execSync(`rm -rf "${workDir}"`);
         } catch { /* ignore */ }
         return NextResponse.json(
-          { error: "LaTeX compilation failed", log: logContent },
+          { error: errorSummary, log: logContent },
           { status: 400 }
         );
       }

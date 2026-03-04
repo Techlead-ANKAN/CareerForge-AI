@@ -169,7 +169,8 @@ export default function ResumeBuilderPage() {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       const pageText = content.items
-        .map((item: { str?: string }) => ("str" in item ? item.str : ""))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((item: any) => (item.str ? item.str : ""))
         .join(" ");
       textParts.push(pageText);
     }
@@ -239,6 +240,40 @@ export default function ResumeBuilderPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // Sanitize LaTeX to fix known tikz/pgf issues before compilation
+  const sanitizeLatex = (code: string): string => {
+    let result = code;
+
+    // Fix bare \clip not inside a scope — wrap in scope
+    // Match \clip that is NOT preceded by \begin{scope} (within the same tikzpicture)
+    result = result.replace(
+      /(\\begin\{tikzpicture\}[^\n]*\n)([\s\S]*?)(\\clip\s)/g,
+      (match, start, between, clip) => {
+        // Only add scope if there isn't one already
+        if (!between.includes('\\begin{scope}')) {
+          // Find the corresponding \node and closing \end{tikzpicture}
+          return `${start}${between}\\begin{scope}\n    ${clip}`;
+        }
+        return match;
+      }
+    );
+
+    // If we added \begin{scope} for clip, add \end{scope} after the \node line
+    // This is a best-effort fix
+    result = result.replace(
+      /(\\begin\{scope\}\s*\n\s*\\clip[^;]*;\s*\n\s*\\node[^;]*;\s*\n)(\s*)(\\end\{tikzpicture\})/g,
+      '$1$2\\end{scope}\n$2$3'
+    );
+
+    // Remove problematic \pgfutil commands
+    result = result.replace(/\\pgfutil@[a-zA-Z]+/g, '');
+
+    // Remove \foreach loops (they often cause pgf issues) — replace with comment
+    result = result.replace(/\\foreach\s+\\[^{]*\s+in\s+\{[^}]*\}\s*\{[^}]*\}/g, '% foreach removed for compatibility');
+
+    return result;
+  };
+
   const generateResume = async () => {
     const key = getApiKey();
     if (!key) {
@@ -263,18 +298,50 @@ export default function ResumeBuilderPage() {
 === TEMPLATE: ${template.name} ===
 ${template.promptInstructions}
 
-=== CRITICAL RULES ===
-- Output ONLY the complete LaTeX code, absolutely nothing else before or after
+=== ABSOLUTE RULES (MUST FOLLOW) ===
+- Output ONLY the complete LaTeX code — nothing else before or after
 - Do NOT wrap in markdown code blocks (\`\`\`)
-- Make it compile with pdflatex WITHOUT errors
+- Must compile with pdflatex WITHOUT errors on first try
 - Do NOT use any packages that require XeLaTeX or LuaLaTeX
-- Keep it to 1 page (2 pages max if extensive experience)
-${hasPhoto ? `- INCLUDE a profile photo: use \\includegraphics[width=2.5cm]{photo.jpg} with circular clipping via tikz:
+- The page background MUST be WHITE — do NOT use dark backgrounds, colored page fills, or dark themes
+- Sidebar/column accent colors are fine but the main page/paper color must stay white
+- Text color must be dark (black/dark gray) for readability on white paper
+- NEVER use numbered sections — always use \\setcounter{secnumdepth}{0} in preamble and \\pagestyle{empty}
+- Section headings must NEVER show numbers like "1 Summary" or "2.1 Experience"
+- Use \\begin{itemize}[leftmargin=*,nosep] for compact bullet points
+- Escape special LaTeX characters in user data: & % $ # _ { } ~ ^
+- Keep to 1 page (max 2 if extensive experience provided)
+- ALL content must be properly aligned — no overlapping text
+- For two-column layouts use minipage or paracol — NOT multicols with tikz absolute positioning
+
+=== TIKZ SAFETY RULES (CRITICAL — prevents pgf/tikz compilation errors) ===
+- ALWAYS wrap \\clip operations inside a \\begin{scope}...\\end{scope}
+- NEVER use \\clip directly inside tikzpicture without a scope
+- Correct photo pattern:
   \\begin{tikzpicture}
-    \\clip (0,0) circle (1.25cm);
-    \\node at (0,0) {\\includegraphics[width=2.5cm]{photo.jpg}};
+    \\begin{scope}
+      \\clip (0,0) circle (1.25cm);
+      \\node at (0,0) {\\includegraphics[width=2.5cm]{photo.jpg}};
+    \\end{scope}
   \\end{tikzpicture}
-- The photo file "photo.jpg" will be in the same directory` : "- Do NOT include any photo/image in this resume"}
+- Do NOT use \\foreach loops in tikz — expand manually instead
+- Do NOT use pgfmath or \\pgfmathresult
+- Do NOT use \\pgfutil or any pgf internal macros
+- Keep tikzpicture environments SIMPLE — use basic \\fill, \\draw, \\node only
+- For colored background rectangles use:
+  \\begin{tikzpicture}[remember picture,overlay]
+    \\fill[color] (current page.north west) rectangle ([xshift=Xcm]current page.south west);
+  \\end{tikzpicture}
+- For skill pills prefer \\colorbox{color}{\\small text} over tikz nodes
+- Test: if a tikz construct looks complex, simplify it or use basic LaTeX instead
+${hasPhoto ? `- INCLUDE profile photo with this EXACT code (scope is mandatory):
+  \\begin{tikzpicture}
+    \\begin{scope}
+      \\clip (0,0) circle (1.25cm);
+      \\node at (0,0) {\\includegraphics[width=2.5cm]{photo.jpg}};
+    \\end{scope}
+  \\end{tikzpicture}
+- The file "photo.jpg" exists in the same directory` : "- Do NOT include any photo/image/\\includegraphics in this resume"}
 
 === PERSON DETAILS ===
 Name: ${form.fullName}
@@ -285,7 +352,7 @@ LinkedIn: ${form.linkedin || "Not provided"}
 GitHub: ${form.github || "Not provided"}
 Target Role: ${form.targetRole}
 
-${form.jobDescription ? `=== JOB DESCRIPTION ===\n${form.jobDescription}` : ""}
+${form.jobDescription ? `=== JOB DESCRIPTION (tailor resume to match this) ===\n${form.jobDescription}` : ""}
 ${form.summary ? `=== PROFESSIONAL SUMMARY ===\n${form.summary}` : ""}
 ${form.education ? `=== EDUCATION ===\n${form.education}` : ""}
 ${form.experience ? `=== WORK EXPERIENCE ===\n${form.experience}` : ""}
@@ -299,6 +366,7 @@ Generate the complete LaTeX code now:`;
 
       let text = await generateWithRetry(prompt);
       text = text.replace(/^```(?:latex|tex)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+      text = sanitizeLatex(text);
       setLatexCode(text);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Generation failed";
@@ -313,11 +381,9 @@ Generate the complete LaTeX code now:`;
     setDownloading(true);
     setError("");
 
-    try {
-      const body: Record<string, string> = { latex: latexCode };
-      if (photoBase64) {
-        body.photo = photoBase64;
-      }
+    const attemptCompile = async (code: string): Promise<Blob> => {
+      const body: Record<string, string> = { latex: code };
+      if (photoBase64) body.photo = photoBase64;
 
       const response = await fetch("/api/latex-to-pdf", {
         method: "POST",
@@ -330,7 +396,81 @@ Generate the complete LaTeX code now:`;
         throw new Error(data.error || "PDF conversion failed");
       }
 
-      const blob = await response.blob();
+      return response.blob();
+    };
+
+    try {
+      let blob: Blob;
+      try {
+        blob = await attemptCompile(latexCode);
+      } catch (firstErr: unknown) {
+        // Auto-fix attempt 1: ask Gemini to fix the LaTeX errors
+        const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        setError("Compilation failed — auto-fixing LaTeX code (attempt 1)...");
+
+        let fixedCode = "";
+        try {
+          const fixPrompt = `The following LaTeX resume code failed to compile with pdflatex. Fix ALL errors and return ONLY the corrected LaTeX code, nothing else. Do NOT wrap in markdown code blocks.
+
+COMMON FIX RULES:
+- If error mentions pgfutil or pgf internal macros: simplify ALL tikz code, wrap every \\clip in a scope environment, remove \\foreach loops, avoid pgfmath
+- If error mentions undefined control sequence: check package imports
+- If error mentions missing }: check brace matching
+- Always wrap \\clip inside \\begin{scope}...\\end{scope}
+- Replace complex tikz nodes for skill pills with simple \\colorbox{color}{text}
+- Keep tikzpicture environments minimal: only \\fill, \\draw, \\node, \\clip (in scope)
+
+COMPILATION ERRORS:
+${errMsg}
+
+ORIGINAL LATEX CODE:
+${latexCode}`;
+
+          fixedCode = await generateWithRetry(fixPrompt);
+          fixedCode = fixedCode.replace(/^\`\`\`(?:latex|tex)?\s*\n?/i, "").replace(/\n?\`\`\`\s*$/i, "").trim();
+          // Sanitize known problematic tikz patterns
+          fixedCode = sanitizeLatex(fixedCode);
+          setLatexCode(fixedCode);
+          setError("");
+
+          blob = await attemptCompile(fixedCode);
+        } catch (fixErr: unknown) {
+          // Auto-fix attempt 2: aggressive simplification
+          const fixMsg2 = fixErr instanceof Error ? fixErr.message : String(fixErr);
+          setError("Auto-fix attempt 1 failed — trying aggressive simplification (attempt 2)...");
+
+          try {
+            const fixPrompt2 = `The following LaTeX resume STILL fails to compile even after a first fix attempt. The TikZ code is causing problems.
+
+APPLY THESE AGGRESSIVE FIXES — return ONLY the corrected LaTeX code:
+1. REMOVE all \\foreach loops entirely — expand them manually or remove
+2. REMOVE all \\pgfmathresult, \\pgfutil, \\pgfmath* commands
+3. Replace ALL tikz skill bars/pills with simple \\colorbox{color}{\\strut\\small text} 
+4. Wrap EVERY \\clip inside \\begin{scope}...\\end{scope}
+5. For sidebar backgrounds, use a single simple \\fill rectangle — nothing complex
+6. If tikzpicture causes issues, consider removing decorative tikz entirely and use basic LaTeX (\\rule, \\colorbox, etc.)
+7. Do NOT use tikz libraries (no calc, no positioning, no decorations)
+
+COMPILATION ERRORS:
+${fixMsg2}
+
+FAILING LATEX CODE:
+${fixedCode}`;
+
+            let fixedCode2 = await generateWithRetry(fixPrompt2);
+            fixedCode2 = fixedCode2.replace(/^\`\`\`(?:latex|tex)?\s*\n?/i, "").replace(/\n?\`\`\`\s*$/i, "").trim();
+            fixedCode2 = sanitizeLatex(fixedCode2);
+            setLatexCode(fixedCode2);
+            setError("");
+
+            blob = await attemptCompile(fixedCode2);
+          } catch (fixErr2: unknown) {
+            const fixMsg = fixErr2 instanceof Error ? fixErr2.message : "PDF conversion failed after auto-fix";
+            throw new Error(`Auto-fix failed after 2 attempts: ${fixMsg}`);
+          }
+        }
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

@@ -18,17 +18,33 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     color: "from-blue-500 to-indigo-600",
     preview: "💼",
     hasPhoto: true,
-    promptInstructions: `Create a MODERN PROFESSIONAL resume with these LaTeX design rules:
-- Use a two-column layout: left sidebar (30%) with dark/colored background for contact info, photo, and skills; right main area (70%) for experience, education, projects
-- Use \\documentclass[a4paper,10pt]{article}
-- Required packages: geometry, xcolor, tikz, fontawesome5, enumitem, hyperref, titlesec, multicol, graphicx, fontenc, inputenc, parskip, tabularx
-- Define a primary color: \\definecolor{primary}{HTML}{2563EB} and \\definecolor{sidebar}{HTML}{1e293b}
-- Use tikz for the sidebar background: a filled rectangle on the left
-- In the sidebar: photo (circular clipped if provided), name, contact details with fontawesome icons (\\faEnvelope, \\faPhone, \\faMapMarker, \\faLinkedin, \\faGithub), skills as tag-style items
-- Main area: Professional Summary, Experience, Education, Projects, Achievements sections
-- Use \\titlerule or colored underlines for section headings
-- Use compact spacing, no excessive whitespace
-- Ensure it compiles with pdflatex`,
+    promptInstructions: `Create a MODERN PROFESSIONAL resume using this EXACT LaTeX structure:
+
+\\documentclass[a4paper,10pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage[margin=0pt]{geometry}
+\\usepackage{xcolor,tikz,fontawesome5,enumitem,hyperref,graphicx,parskip}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+
+CRITICAL DESIGN RULES:
+- Page background MUST be WHITE — the resume will be printed on white paper
+- Use minipage for two-column layout: left sidebar (0.32\\linewidth) and right main area (0.65\\linewidth)
+- Sidebar: use a LIGHT colored background (\\definecolor{sidebar}{HTML}{f0f4ff} — light blue-gray) NOT dark
+- All text must be dark colored for readability on white/light backgrounds
+- Right column: white background with all main sections
+- NEVER use \\section numbering — use \\section* or set \\setcounter{secnumdepth}{0}
+- Section titles: use custom commands with colored underlines, NO numbered sections like "1 Summary"
+- Photo: place circular clipped photo at top of sidebar using tikz \\clip circle INSIDE a \\begin{scope}...\\end{scope}
+- Contact info in sidebar with fontawesome5 icons: \\faIcon{envelope}, \\faIcon{phone}, \\faIcon{map-marker-alt}, \\faIcon{linkedin}, \\faIcon{github}
+- Skills in sidebar as small rounded tags/pills using \\colorbox{lightaccent}{\\small SkillName} (NOT tikz nodes)
+- Right column sections: Professional Summary, Experience, Education, Projects, Achievements
+- Experience entries: \\textbf{Role} at \\textbf{Company} \\hfill dates, then bullet items
+- Use \\begin{itemize}[leftmargin=*,nosep,label={\\textbullet}] for tight bullets
+- Define primary color: \\definecolor{primary}{HTML}{2563EB}
+- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
+- Fit everything on ONE page with compact spacing`,
   },
   {
     id: "classic-elegant",
@@ -37,18 +53,29 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     color: "from-gray-600 to-gray-800",
     preview: "🎩",
     hasPhoto: false,
-    promptInstructions: `Create a CLASSIC ELEGANT resume with these LaTeX design rules:
-- Single column, clean traditional layout
-- Use \\documentclass[a4paper,11pt]{article}
-- Required packages: geometry, enumitem, hyperref, titlesec, fontenc, inputenc, parskip, xcolor, tabularx
-- Set margins: \\geometry{left=0.75in,right=0.75in,top=0.6in,bottom=0.6in}
-- Name centered at top in large bold, contact info on one line below with vertical bars as separators
-- Section headers: uppercase, bold, with a full-width horizontal rule underneath (\\titlerule)
-- Experience entries: Company and role bold, dates right-aligned, bullet points with tight spacing
-- Use Georgia/Times-like feel: add \\usepackage{charter} or \\usepackage{palatino}
-- Minimal color - use black and dark gray only
-- Keep it 1 page, very clean and scannable
-- Ensure it compiles with pdflatex`,
+    promptInstructions: `Create a CLASSIC ELEGANT resume using this EXACT LaTeX structure:
+
+\\documentclass[a4paper,11pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{charter}
+\\usepackage[left=0.75in,right=0.75in,top=0.6in,bottom=0.6in]{geometry}
+\\usepackage{enumitem,hyperref,titlesec,xcolor,parskip}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+
+CRITICAL DESIGN RULES:
+- Single column, classic layout — NO graphics, NO tikz, NO photos
+- Name: \\begin{center}{\\LARGE\\bfseries NAME}\\end{center} at top
+- Contact: single centered line below name using middots: email · phone · location · LinkedIn
+- Section headers: \\titleformat{\\section}{\\large\\bfseries\\uppercase}{}{0em}{} followed by \\titlerule
+- NEVER numbered sections — use \\section* or \\setcounter{secnumdepth}{0}
+- Experience: \\textbf{Company} \\hfill Location \\\\ \\textit{Role Title} \\hfill \\textit{Date Range}
+- Then bullet items with \\begin{itemize}[leftmargin=*,nosep]
+- Education: same format as experience with GPA/marks
+- Skills: comma-separated list grouped by category
+- Keep to 1 page, very clean scannable layout
+- Black and dark gray only, serif font (charter/palatino)`,
   },
   {
     id: "creative-modern",
@@ -57,19 +84,31 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     color: "from-purple-500 to-pink-600",
     preview: "🎨",
     hasPhoto: true,
-    promptInstructions: `Create a CREATIVE MODERN resume with these LaTeX design rules:
-- Use a striking header section with a colored band/banner at the top
-- Use \\documentclass[a4paper,10pt]{article}
-- Required packages: geometry, xcolor, tikz, fontawesome5, enumitem, hyperref, titlesec, graphicx, fontenc, inputenc, parskip, progressbar or tikz for skill bars, tabularx
-- Define vibrant colors: \\definecolor{accent}{HTML}{8B5CF6} \\definecolor{secondary}{HTML}{EC4899}
-- Header: colored background band with name in white/large text, photo circle on the right (if provided), contact info with icons below
-- Section headers: colored, bold, with decorative left border or accent line
-- Skills: display as progress bars or filled circles using tikz
-- Use icons (fontawesome5) for contact details and section decorations
-- Experience: clean entries with accent-colored company names and dates
-- Add subtle color touches throughout without overdoing it
-- Keep it professional despite being creative
-- Ensure it compiles with pdflatex`,
+    promptInstructions: `Create a CREATIVE MODERN resume using this EXACT LaTeX structure:
+
+\\documentclass[a4paper,10pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage[left=0.6in,right=0.6in,top=0.4in,bottom=0.5in]{geometry}
+\\usepackage{xcolor,tikz,fontawesome5,enumitem,hyperref,titlesec,graphicx,parskip}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+
+CRITICAL DESIGN RULES:
+- Page background MUST be WHITE
+- Header: A colored accent banner/strip at the top (not full dark background) with name in bold dark or white text
+- Photo circle on the right side of the header using tikz \\clip circle INSIDE a \\begin{scope}...\\end{scope} (if provided)
+- Contact row below header with fontawesome5 icons: \\faIcon{envelope} email \\quad \\faIcon{phone} phone etc.
+- Section headers: colored bold text with a thick left accent border using \\textcolor{accent}{\\rule{3pt}{12pt}} before section name
+- NEVER numbered sections — use \\section* or set secnumdepth to 0
+- Skills: display as colored bars using \\colorbox (NOT tikz progress bars — use \\textcolor{accent}{\\rule{Xcm}{6pt}} on \\textcolor{gray!30}{\\rule{3cm}{6pt}} background)
+- Experience: \\textcolor{accent}{\\textbf{Company}} \\hfill dates, role italic below, then bullets
+- Use \\begin{itemize}[leftmargin=*,nosep] for compact bullets
+- Colors: \\definecolor{accent}{HTML}{8B5CF6} \\definecolor{secondary}{HTML}{EC4899}
+- All text must be dark (black/dark gray) for readability on white background
+- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
+- Single column layout, fit on ONE page
+- Professional but visually interesting`,
   },
   {
     id: "minimal-clean",
@@ -78,20 +117,30 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     color: "from-emerald-500 to-teal-600",
     preview: "✨",
     hasPhoto: false,
-    promptInstructions: `Create a MINIMAL CLEAN resume with these LaTeX design rules:
-- Ultra-minimalist single-column layout with generous whitespace
-- Use \\documentclass[a4paper,11pt]{article}
-- Required packages: geometry, enumitem, hyperref, titlesec, fontenc, inputenc, parskip, xcolor
-- Set margins: \\geometry{left=1in,right=1in,top=0.8in,bottom=0.8in}
-- Use a clean sans-serif font: \\usepackage[sfdefault]{roboto} or \\renewcommand{\\familydefault}{\\sfdefault}
-- Name: large and clean at top left, no boxes or colors
-- Contact: single line, items separated by middot (·)
-- Section headers: simple bold text with subtle thin line underneath
-- Very tight bullet points with minimal indentation
-- No colors at all - pure black and white
-- Maximum ATS compatibility - no tables, no columns, no graphics
-- Focus on content density and readability
-- Ensure it compiles with pdflatex`,
+    promptInstructions: `Create a MINIMAL CLEAN resume using this EXACT LaTeX structure:
+
+\\documentclass[a4paper,11pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\renewcommand{\\familydefault}{\\sfdefault}
+\\usepackage[left=0.8in,right=0.8in,top=0.7in,bottom=0.7in]{geometry}
+\\usepackage{enumitem,hyperref,titlesec,xcolor,parskip}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+
+CRITICAL DESIGN RULES:
+- Ultra-minimalist single-column layout — NO graphics, NO tikz, NO photos, NO colors
+- Pure black and white only
+- Name at top left: {\\LARGE\\bfseries Name} on its own line, large and clean
+- Contact on next line: email \\textperiodcentered\\space phone \\textperiodcentered\\space location \\textperiodcentered\\space LinkedIn
+- Section headers: \\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{} with thin \\titlerule below
+- NEVER numbered sections — set secnumdepth to 0
+- Experience: \\textbf{Role}, Company \\hfill Date range, then tight bullet points
+- \\begin{itemize}[leftmargin=12pt,nosep,label={--}] for minimal bullets
+- Maximum ATS compatibility — no tables, no columns, no graphics, no fancy formatting
+- Only standard fonts, no special packages beyond basics
+- Clean whitespace between sections, content-dense bullets
+- MUST fit on 1 page`,
   },
   {
     id: "tech-developer",
@@ -100,19 +149,31 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     color: "from-cyan-500 to-blue-600",
     preview: "💻",
     hasPhoto: true,
-    promptInstructions: `Create a TECH DEVELOPER resume with these LaTeX design rules:
-- Developer-focused layout with code/tech aesthetic
-- Use \\documentclass[a4paper,10pt]{article}
-- Required packages: geometry, xcolor, tikz, fontawesome5, enumitem, hyperref, titlesec, graphicx, fontenc, inputenc, parskip, fancyhdr, tabularx
-- Define colors: \\definecolor{darkbg}{HTML}{0f172a} \\definecolor{accent}{HTML}{06b6d4} \\definecolor{tag}{HTML}{1e293b}
-- Header: Name bold with a colored accent line, contact info with \\faGithub \\faLinkedin \\faEnvelope icons, optional photo
-- Skills section: display as rounded tag/badge shapes using tikz (like GitHub topic tags)
-- Projects section prominent: project name, tech stack tags, description, links
-- Experience: emphasized tech stack for each role
-- Use monospace font for technical terms: \\texttt{} 
-- Section dividers: thin accent-colored lines
-- Add a "Technical Skills" section organized by category (Languages, Frameworks, Tools, etc.)
-- Ensure it compiles with pdflatex`,
+    promptInstructions: `Create a TECH DEVELOPER resume using this EXACT LaTeX structure:
+
+\\documentclass[a4paper,10pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage[left=0.6in,right=0.6in,top=0.5in,bottom=0.5in]{geometry}
+\\usepackage{xcolor,tikz,fontawesome5,enumitem,hyperref,titlesec,graphicx,parskip}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+
+CRITICAL DESIGN RULES:
+- Page background MUST be WHITE — no dark theme
+- Header: Name in large bold dark text with a colored accent line (\\textcolor{accent}{\\rule{\\linewidth}{2pt}}) below
+- Contact row with fontawesome5 icons: \\faIcon{github} \\faIcon{linkedin} \\faIcon{envelope} \\faIcon{phone}
+- Photo (if provided): small circular photo in top-right corner using tikz \\clip circle INSIDE a \\begin{scope}...\\end{scope}
+- NEVER numbered sections — use \\section* or secnumdepth 0
+- Section headers: \\textcolor{accent}{\\textbf{\\uppercase{Section Name}}} with thin accent-colored \\rule below
+- Skills: display as rounded tag pills using \\colorbox{tagbg}{\\small SkillName} (prefer colorbox over tikz nodes)
+- Define: \\definecolor{accent}{HTML}{06b6d4} \\definecolor{tagbg}{HTML}{e0f2fe}
+- Technical Skills organized by category: Languages, Frameworks, Tools, Databases
+- Projects section prominent: \\textbf{Project Name} | {\\small tech stack tags} \\\\ description with bullets
+- Experience: \\textbf{Role} at \\textbf{Company} \\hfill dates, tech stack emphasized
+- All text dark (black/charcoal) for readability
+- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
+- Fit on ONE page`,
   },
   {
     id: "executive-premium",
@@ -121,20 +182,34 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     color: "from-amber-500 to-yellow-600",
     preview: "👔",
     hasPhoto: true,
-    promptInstructions: `Create an EXECUTIVE PREMIUM resume with these LaTeX design rules:
-- Sophisticated two-column layout for senior/executive positions
-- Use \\documentclass[a4paper,10pt]{article}
-- Required packages: geometry, xcolor, tikz, fontawesome5, enumitem, hyperref, titlesec, graphicx, fontenc, inputenc, parskip, tabularx
-- Define colors: \\definecolor{gold}{HTML}{D97706} \\definecolor{navy}{HTML}{1e3a5f} \\definecolor{darktext}{HTML}{1f2937}
-- Left column (35%): Photo (if provided), contact info, skills, certifications, languages
-- Right column (65%): Name in large navy text, gold accent line, professional summary, experience, education
-- Use gold accent lines and navy text for headers
-- Section headers: navy colored, small caps or uppercase, with gold underline
-- Experience: sophisticated formatting with company logo placeholder area, role title bold
-- Use \\usepackage{charter} or similar serif font for elegance
-- Professional summary section at top of main column
-- Keep it refined, not flashy
-- Ensure it compiles with pdflatex`,
+    promptInstructions: `Create an EXECUTIVE PREMIUM resume using this EXACT LaTeX structure:
+
+\\documentclass[a4paper,10pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{charter}
+\\usepackage[margin=0pt]{geometry}
+\\usepackage{xcolor,tikz,fontawesome5,enumitem,hyperref,titlesec,graphicx,parskip}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+
+CRITICAL DESIGN RULES:
+- Page background MUST be WHITE
+- Use minipage for two columns: left column (0.33\\linewidth) and right column (0.64\\linewidth)
+- Left column: LIGHT warm gray background (\\definecolor{leftbg}{HTML}{faf8f5}) using tikz filled rectangle — NOT dark
+- Right column: white background with name in large navy bold at top, gold accent line below name
+- NEVER use numbered sections — use \\section* or secnumdepth 0
+- Section headers in right column: \\textcolor{navy}{\\textbf{\\uppercase{Section}}} with gold \\rule below
+- Section headers in left column: \\textcolor{gold}{\\textbf{Section}} simple bold
+- Colors: \\definecolor{gold}{HTML}{D97706} \\definecolor{navy}{HTML}{1e3a5f}
+- All text must be dark for readability on white/light backgrounds
+- Professional Summary at top of right column
+- Experience: \\textbf{Role} \\hfill dates \\\\ \\textit{Company} \\\\ bullets
+- Photo: circular clipped at top of left column INSIDE a \\begin{scope}...\\end{scope}
+- Use charter serif font for elegance
+- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
+- Refined, sophisticated look — not flashy
+- Fit on ONE page`,
   },
 ];
 

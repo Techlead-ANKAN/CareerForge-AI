@@ -186,17 +186,76 @@ Output the email text only (no LaTeX needed for emails).`;
   const downloadPDF = async () => {
     if (!latexCode) return;
     setDownloadingPdf(true);
-    try {
+    setError("");
+
+    const attemptCompile = async (code: string): Promise<Blob> => {
       const response = await fetch("/api/latex-to-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ latex: latexCode }),
+        body: JSON.stringify({ latex: code }),
       });
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "PDF conversion failed");
       }
-      const blob = await response.blob();
+      return response.blob();
+    };
+
+    try {
+      let blob: Blob;
+      try {
+        blob = await attemptCompile(latexCode);
+      } catch (firstErr: unknown) {
+        const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        setError("Compilation failed — auto-fixing LaTeX code (attempt 1)...");
+
+        try {
+          const fixPrompt = `The following LaTeX code failed to compile with pdflatex. Fix ALL errors and return ONLY the corrected LaTeX code, nothing else. Do NOT wrap in markdown code blocks.
+
+COMMON FIX RULES:
+- If error mentions pgfutil or pgf internal macros: simplify ALL tikz code, wrap every \\clip in a scope environment, remove \\foreach loops
+- If error mentions undefined control sequence: check package imports
+- Always wrap \\clip inside \\begin{scope}...\\end{scope}
+
+COMPILATION ERRORS:
+${errMsg}
+
+ORIGINAL LATEX CODE:
+${latexCode}`;
+          let fixedCode = await generateWithRetry(fixPrompt);
+          fixedCode = fixedCode.replace(/^```(?:latex|tex)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+          setLatexCode(fixedCode);
+          setError("");
+          blob = await attemptCompile(fixedCode);
+        } catch (fixErr: unknown) {
+          // Attempt 2: aggressive simplification
+          const errMsg2 = fixErr instanceof Error ? fixErr.message : String(fixErr);
+          setError("Auto-fix attempt 1 failed — trying aggressive simplification (attempt 2)...");
+
+          try {
+            const fixPrompt2 = `The following LaTeX STILL fails after a first fix attempt. Apply AGGRESSIVE fixes — return ONLY corrected LaTeX:
+1. REMOVE all \\foreach loops
+2. REMOVE all \\pgfmath* commands
+3. Wrap every \\clip in \\begin{scope}...\\end{scope}
+4. Replace complex tikz with simple \\colorbox or \\rule
+5. If tikz is causing issues, remove decorative tikz entirely
+
+ERRORS: ${errMsg2}
+
+FAILING CODE:
+${latexCode}`;
+            let fixedCode2 = await generateWithRetry(fixPrompt2);
+            fixedCode2 = fixedCode2.replace(/^```(?:latex|tex)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+            setLatexCode(fixedCode2);
+            setError("");
+            blob = await attemptCompile(fixedCode2);
+          } catch (fixErr2: unknown) {
+            const fixMsg = fixErr2 instanceof Error ? fixErr2.message : "PDF conversion failed after auto-fix";
+            throw new Error(`Auto-fix failed after 2 attempts: ${fixMsg}`);
+          }
+        }
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
