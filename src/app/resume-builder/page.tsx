@@ -127,6 +127,7 @@ export default function ResumeBuilderPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [educations, setEducations] = useState<EducationEntry[]>([emptyEducation()]);
   const [jdFileName, setJdFileName] = useState<string | null>(null);
+  const [jdLoading, setJdLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jdFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -156,21 +157,56 @@ export default function ResumeBuilderPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleJDUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    const pdfjsLib = await import("pdfjs-dist");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const textParts: string[] = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: { str?: string }) => ("str" in item ? item.str : ""))
+        .join(" ");
+      textParts.push(pageText);
+    }
+
+    return textParts.join("\n\n");
+  };
+
+  const handleJDUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setJdFileName(file.name);
+    setError("");
+    setJdLoading(true);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = reader.result as string;
-      updateForm("jobDescription", text);
-    };
-    reader.onerror = () => {
-      setError("Failed to read file. Please try a .txt file or paste the text directly.");
-    };
-    reader.readAsText(file);
+    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+    try {
+      if (isPDF) {
+        const text = await extractTextFromPDF(file);
+        if (!text.trim()) {
+          setError("Could not extract text from this PDF. It may be image-based. Try copy-pasting the text instead.");
+          setJdFileName(null);
+          return;
+        }
+        updateForm("jobDescription", text.trim());
+      } else {
+        // Plain text files (.txt, .md, etc.)
+        const text = await file.text();
+        updateForm("jobDescription", text);
+      }
+    } catch {
+      setError("Failed to read file. Please try a different file or paste the text directly.");
+      setJdFileName(null);
+    } finally {
+      setJdLoading(false);
+    }
   };
 
   const clearJDFile = () => {
@@ -541,7 +577,7 @@ Generate the complete LaTeX code now:`;
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted">Job Description (optional — helps AI tailor your resume)</label>
                   <div className="flex items-center gap-2">
-                    {jdFileName && (
+                    {jdFileName && !jdLoading && (
                       <span className="flex items-center gap-1.5 text-xs text-success bg-success/10 border border-success/20 px-2 py-1 rounded-lg">
                         <CheckCircle className="w-3 h-3" /> {jdFileName}
                         <button onClick={clearJDFile} className="text-danger/60 hover:text-danger ml-1">
@@ -549,16 +585,22 @@ Generate the complete LaTeX code now:`;
                         </button>
                       </span>
                     )}
+                    {jdLoading && (
+                      <span className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Extracting text...
+                      </span>
+                    )}
                     <button
                       onClick={() => jdFileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg text-xs font-medium hover:bg-primary/20 transition-all"
+                      disabled={jdLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg text-xs font-medium hover:bg-primary/20 transition-all disabled:opacity-50"
                     >
                       <Upload className="w-3.5 h-3.5" /> Upload File
                     </button>
                     <input
                       ref={jdFileInputRef}
                       type="file"
-                      accept=".txt,.text,.md,.rtf,.doc,.docx,.pdf"
+                      accept=".txt,.text,.md,.pdf"
                       onChange={handleJDUpload}
                       className="hidden"
                     />
