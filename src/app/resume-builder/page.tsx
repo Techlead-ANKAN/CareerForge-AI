@@ -17,9 +17,68 @@ import {
   X,
   Layout,
   Camera,
+  Plus,
+  Trash2,
+  Upload,
 } from "lucide-react";
 import { getApiKey, generateWithRetry } from "@/lib/gemini";
 import { RESUME_TEMPLATES, getTemplateById } from "@/lib/templates";
+
+interface EducationEntry {
+  id: string;
+  degree: string;
+  fieldOfStudy: string;
+  institution: string;
+  startYear: string;
+  endYear: string;
+  gradeType: "GPA" | "CGPA" | "Percentage" | "Grade";
+  gradeValue: string;
+  gradeScale: string;
+  coursework: string;
+}
+
+const emptyEducation = (): EducationEntry => ({
+  id: crypto.randomUUID(),
+  degree: "",
+  fieldOfStudy: "",
+  institution: "",
+  startYear: "",
+  endYear: "",
+  gradeType: "CGPA",
+  gradeValue: "",
+  gradeScale: "10",
+  coursework: "",
+});
+
+const gradeTypes = [
+  { value: "GPA", label: "GPA", defaultScale: "4.0" },
+  { value: "CGPA", label: "CGPA", defaultScale: "10" },
+  { value: "Percentage", label: "Percentage", defaultScale: "100" },
+  { value: "Grade", label: "Grade (A/B/C)", defaultScale: "" },
+];
+
+function formatEducationsToString(educations: EducationEntry[]): string {
+  return educations
+    .filter((e) => e.degree || e.institution)
+    .map((e) => {
+      const parts: string[] = [];
+      const degreeLine = [e.degree, e.fieldOfStudy].filter(Boolean).join(" in ");
+      if (degreeLine) parts.push(degreeLine);
+      if (e.institution) parts.push(`Institution: ${e.institution}`);
+      const years = [e.startYear, e.endYear].filter(Boolean).join(" - ");
+      if (years) parts.push(`Duration: ${years}`);
+      if (e.gradeValue) {
+        if (e.gradeType === "Grade") {
+          parts.push(`Grade: ${e.gradeValue}`);
+        } else {
+          parts.push(`${e.gradeType}: ${e.gradeValue}${e.gradeScale ? `/${e.gradeScale}` : ""}`);
+        }
+      }
+      if (e.coursework) parts.push(`Relevant Coursework: ${e.coursework}`);
+      return parts.join("\n");
+    })
+    .join("\n\n");
+}
 
 interface ResumeForm {
   fullName: string;
@@ -66,10 +125,58 @@ export default function ResumeBuilderPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("modern-professional");
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [educations, setEducations] = useState<EducationEntry[]>([emptyEducation()]);
+  const [jdFileName, setJdFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const jdFileInputRef = useRef<HTMLInputElement>(null);
+
+  const updateEducation = (id: string, field: keyof EducationEntry, value: string) => {
+    setEducations((prev) => {
+      const updated = prev.map((e) => (e.id === id ? { ...e, [field]: value } : e));
+      // sync to form.education
+      setForm((f) => ({ ...f, education: formatEducationsToString(updated) }));
+      return updated;
+    });
+  };
+
+  const addEducation = () => {
+    setEducations((prev) => [...prev, emptyEducation()]);
+  };
+
+  const removeEducation = (id: string) => {
+    setEducations((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      const remaining = updated.length > 0 ? updated : [emptyEducation()];
+      setForm((f) => ({ ...f, education: formatEducationsToString(remaining) }));
+      return remaining;
+    });
+  };
 
   const updateForm = (field: keyof ResumeForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleJDUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setJdFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      updateForm("jobDescription", text);
+    };
+    reader.onerror = () => {
+      setError("Failed to read file. Please try a .txt file or paste the text directly.");
+    };
+    reader.readAsText(file);
+  };
+
+  const clearJDFile = () => {
+    setJdFileName(null);
+    updateForm("jobDescription", "");
+    if (jdFileInputRef.current) jdFileInputRef.current.value = "";
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -429,13 +536,45 @@ Generate the complete LaTeX code now:`;
                 value={form.targetRole}
                 onChange={(e) => updateForm("targetRole", e.target.value)}
               />
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder="Paste the job description here (optional - helps AI tailor your resume)"
-                rows={6}
-                value={form.jobDescription}
-                onChange={(e) => updateForm("jobDescription", e.target.value)}
-              />
+              {/* Job Description - textarea + upload */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted">Job Description (optional — helps AI tailor your resume)</label>
+                  <div className="flex items-center gap-2">
+                    {jdFileName && (
+                      <span className="flex items-center gap-1.5 text-xs text-success bg-success/10 border border-success/20 px-2 py-1 rounded-lg">
+                        <CheckCircle className="w-3 h-3" /> {jdFileName}
+                        <button onClick={clearJDFile} className="text-danger/60 hover:text-danger ml-1">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    <button
+                      onClick={() => jdFileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg text-xs font-medium hover:bg-primary/20 transition-all"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload File
+                    </button>
+                    <input
+                      ref={jdFileInputRef}
+                      type="file"
+                      accept=".txt,.text,.md,.rtf,.doc,.docx,.pdf"
+                      onChange={handleJDUpload}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+                <textarea
+                  className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
+                  placeholder="Paste the job description here, or upload a file above..."
+                  rows={6}
+                  value={form.jobDescription}
+                  onChange={(e) => {
+                    updateForm("jobDescription", e.target.value);
+                    if (jdFileName) setJdFileName(null);
+                  }}
+                />
+              </div>
               <textarea
                 className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
                 placeholder="Professional summary (optional - AI can generate one)"
@@ -449,16 +588,151 @@ Generate the complete LaTeX code now:`;
           {/* Education */}
           {activeSection === "education" && (
             <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-primary" /> Education
-              </h3>
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder={"List your education\n\nExample:\nB.Tech in Computer Science, IIT Delhi, 2020-2024, GPA: 9.1/10\nRelevant coursework: Data Structures, Algorithms, ML"}
-                rows={8}
-                value={form.education}
-                onChange={(e) => updateForm("education", e.target.value)}
-              />
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-primary" /> Education
+                </h3>
+                <button
+                  onClick={addEducation}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg text-xs font-medium hover:bg-primary/20 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Education
+                </button>
+              </div>
+
+              {educations.map((edu, idx) => (
+                <div
+                  key={edu.id}
+                  className="bg-background border border-border rounded-xl p-4 space-y-3 relative"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-muted">Education {idx + 1}</span>
+                    {educations.length > 1 && (
+                      <button
+                        onClick={() => removeEducation(edu.id)}
+                        className="flex items-center gap-1 px-2 py-1 text-danger/70 hover:text-danger hover:bg-danger/10 rounded-lg text-xs transition-all"
+                      >
+                        <Trash2 className="w-3 h-3" /> Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Degree & Field */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                      placeholder="Degree (e.g., B.Tech, B.Sc, MBA)"
+                      value={edu.degree}
+                      onChange={(e) => updateEducation(edu.id, "degree", e.target.value)}
+                    />
+                    <input
+                      className="bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                      placeholder="Field of Study (e.g., Computer Science)"
+                      value={edu.fieldOfStudy}
+                      onChange={(e) => updateEducation(edu.id, "fieldOfStudy", e.target.value)}
+                    />
+                  </div>
+
+                  {/* Institution */}
+                  <input
+                    className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    placeholder="Institution / University Name"
+                    value={edu.institution}
+                    onChange={(e) => updateEducation(edu.id, "institution", e.target.value)}
+                  />
+
+                  {/* Start & End Year */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted mb-1 block">Start Year</label>
+                      <input
+                        type="number"
+                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                        placeholder="e.g., 2020"
+                        min="1970"
+                        max="2040"
+                        value={edu.startYear}
+                        onChange={(e) => updateEducation(edu.id, "startYear", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted mb-1 block">End Year (or Expected)</label>
+                      <input
+                        type="number"
+                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                        placeholder="e.g., 2024"
+                        min="1970"
+                        max="2040"
+                        value={edu.endYear}
+                        onChange={(e) => updateEducation(edu.id, "endYear", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Marks / Grade */}
+                  <div>
+                    <label className="text-xs text-muted mb-1.5 block">Marks / Grade</label>
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                      <div className="flex rounded-xl border border-border overflow-hidden bg-card">
+                        {gradeTypes.map((gt) => (
+                          <button
+                            key={gt.value}
+                            onClick={() => {
+                              updateEducation(edu.id, "gradeType", gt.value);
+                              if (gt.defaultScale) {
+                                updateEducation(edu.id, "gradeScale", gt.defaultScale);
+                              } else {
+                                updateEducation(edu.id, "gradeScale", "");
+                              }
+                            }}
+                            className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
+                              edu.gradeType === gt.value
+                                ? "bg-primary text-white"
+                                : "text-muted hover:text-foreground"
+                            }`}
+                          >
+                            {gt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        className="w-20 bg-card border border-border rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:border-primary"
+                        placeholder={edu.gradeType === "Grade" ? "A+" : "9.1"}
+                        value={edu.gradeValue}
+                        onChange={(e) => updateEducation(edu.id, "gradeValue", e.target.value)}
+                      />
+                      {edu.gradeType !== "Grade" && (
+                        <div className="flex items-center gap-1 text-sm text-muted">
+                          <span>/</span>
+                          <input
+                            className="w-14 bg-card border border-border rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:border-primary"
+                            placeholder="10"
+                            value={edu.gradeScale}
+                            onChange={(e) => updateEducation(edu.id, "gradeScale", e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Relevant Coursework */}
+                  <div>
+                    <label className="text-xs text-muted mb-1 block">Relevant Coursework (optional)</label>
+                    <input
+                      className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                      placeholder="e.g., Data Structures, Algorithms, Machine Learning, DBMS"
+                      value={edu.coursework}
+                      onChange={(e) => updateEducation(edu.id, "coursework", e.target.value)}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {educations.length > 0 && (
+                <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5 text-xs text-muted">
+                  <span className="text-primary font-medium">{educations.filter((e) => e.degree || e.institution).length}</span> education {educations.filter((e) => e.degree || e.institution).length === 1 ? "entry" : "entries"} added
+                </div>
+              )}
             </div>
           )}
 
