@@ -11,8 +11,14 @@ import {
   GraduationCap,
   Briefcase,
 } from "lucide-react";
-import { getApiKey, generateWithRetry } from "@/lib/gemini";
+import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 import ReactMarkdown from "react-markdown";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 type DocType = "cover-letter" | "academic-cv" | "email-intro";
 
@@ -270,182 +276,268 @@ ${latexCode}`;
     }
   };
 
+  const currentDocType = docTypes.find((d) => d.id === docType)!;
+
   return (
-    <div className="max-w-7xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-          <Mail className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">CV & Cover Letter Generator</h1>
-          <p className="text-sm text-muted">Generate professional documents with AI</p>
-        </div>
-      </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="max-w-[1440px] mx-auto">
+      <PageHeader
+        icon={Mail}
+        title="CV & Cover Letter Generator"
+        subtitle="Generate professional documents with AI"
+        gradient="from-cyan-500 to-blue-600"
+      />
 
       {error && (
-        <div className="bg-danger/10 border border-danger/30 text-danger rounded-xl px-4 py-3 mb-6 text-sm">
+        <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-xl px-4 py-3 mb-6 text-sm">
           {error}
         </div>
       )}
 
-      {/* Doc Type Selector */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      {/* Doc Type Selector — Horizontal Ribbon */}
+      <div className="flex gap-2 p-1.5 rounded-2xl bg-surface-1 border border-glass-border mb-6">
         {docTypes.map((dt) => (
           <button
             key={dt.id}
             onClick={() => setDocType(dt.id)}
-            className={`text-left p-4 rounded-xl border transition-all ${
+            className={`flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-300 flex-1 ${
               docType === dt.id
-                ? "border-primary bg-primary/10 shadow-lg shadow-primary/10"
-                : "border-border bg-card hover:border-primary/30"
+                ? "bg-primary/10 border border-primary/30 shadow-[0_0_20px_rgba(139,92,246,0.12)]"
+                : "border border-transparent hover:bg-surface-2"
             }`}
           >
-            <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${dt.color} flex items-center justify-center mb-2`}>
-              <dt.icon className="w-4 h-4 text-white" />
+            <div className={`h-9 w-9 rounded-lg bg-linear-to-br ${dt.color} flex items-center justify-center shrink-0 ${
+              docType === dt.id ? "shadow-lg" : ""
+            }`}>
+              <dt.icon className="h-4 w-4 text-white" />
             </div>
-            <h3 className="text-sm font-semibold">{dt.label}</h3>
-            <p className="text-xs text-muted mt-1">{dt.description}</p>
+            <div className="text-left min-w-0">
+              <div className={`text-xs font-semibold ${docType === dt.id ? "text-foreground" : "text-muted-foreground"}`}>
+                {dt.label}
+              </div>
+              <div className="text-[10px] text-muted-foreground/60 truncate hidden sm:block">{dt.description}</div>
+            </div>
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Form */}
-        <div className="space-y-4">
-          <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                className="bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                placeholder="Your Name"
-                value={formData.name}
-                onChange={(e) => update("name", e.target.value)}
-              />
-              <input
-                className="bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                placeholder={docType === "academic-cv" ? "Field/Department" : "Target Role"}
-                value={formData.targetRole}
-                onChange={(e) => update("targetRole", e.target.value)}
-              />
-            </div>
-            <input
-              className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-              placeholder={docType === "academic-cv" ? "Institution" : "Company Name"}
-              value={formData.company}
-              onChange={(e) => update("company", e.target.value)}
-            />
-            {docType === "cover-letter" && (
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder="Paste the job description..."
-                rows={4}
-                value={formData.jobDescription}
-                onChange={(e) => update("jobDescription", e.target.value)}
-              />
-            )}
-            <textarea
-              className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary resize-none"
-              placeholder="Paste your resume/background info (helps AI personalize the output)"
-              rows={5}
-              value={formData.resumeText}
-              onChange={(e) => update("resumeText", e.target.value)}
-            />
-            <textarea
-              className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary resize-none"
-              placeholder="Any additional details or special instructions..."
-              rows={3}
-              value={formData.additionalInfo}
-              onChange={(e) => update("additionalInfo", e.target.value)}
-            />
-          </div>
-
-          <button
-            onClick={generate}
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white py-3.5 rounded-xl font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /> Generating...</>
-            ) : (
-              <><FileText className="w-5 h-5" /> Generate {docTypes.find(d => d.id === docType)?.label}</>
-            )}
-          </button>
-        </div>
-
-        {/* Output */}
-        <div className="bg-card border border-border rounded-2xl p-5 flex flex-col h-[600px]">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-2">
-              {latexCode && (
-                <>
-                  <button
-                    onClick={() => setShowLatex(false)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      !showLatex ? "bg-primary text-white" : "bg-background border border-border text-muted"
-                    }`}
-                  >
-                    Preview
-                  </button>
-                  <button
-                    onClick={() => setShowLatex(true)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      showLatex ? "bg-primary text-white" : "bg-background border border-border text-muted"
-                    }`}
-                  >
-                    LaTeX Code
-                  </button>
-                </>
-              )}
-            </div>
-            {generatedText && (
-              <div className="flex gap-2">
-                <button
-                  onClick={copyText}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-lg text-xs hover:border-primary/50"
-                >
-                  {copied ? <CheckCircle className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-                <button
-                  onClick={downloadText}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-lg text-xs hover:border-primary/50"
-                >
-                  <Download className="w-3.5 h-3.5" /> Save
-                </button>
-                {latexCode && (
-                  <button
-                    onClick={downloadPDF}
-                    disabled={downloadingPdf}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-xs hover:bg-primary-hover disabled:opacity-50"
-                  >
-                    {downloadingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                    PDF
-                  </button>
-                )}
+      <div className="flex gap-6">
+        {/* Left: Form */}
+        <div className="flex-1 min-w-0 space-y-4">
+          <Card>
+            <CardContent className="p-6 space-y-5">
+              <div>
+                <h2 className="text-lg font-bold flex items-center gap-2.5">
+                  <currentDocType.icon className="h-5 w-5 text-primary" />
+                  <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">{currentDocType.label} Details</span>
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">Fill in the details for your {currentDocType.label.toLowerCase()}</p>
               </div>
-            )}
-          </div>
 
-          {generatedText ? (
-            <div className="flex-1 overflow-y-auto">
-              {showLatex ? (
-                <pre className="latex-code">{latexCode}</pre>
-              ) : (
-                <div className="markdown-content text-sm">
-                  <ReactMarkdown>{generatedText}</ReactMarkdown>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Your Name</label>
+                  <Input
+                    placeholder="John Doe"
+                    value={formData.name}
+                    onChange={(e) => update("name", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {docType === "academic-cv" ? "Field / Department" : "Target Role"}
+                  </label>
+                  <Input
+                    placeholder={docType === "academic-cv" ? "e.g., Computer Science" : "e.g., Senior Software Engineer"}
+                    value={formData.targetRole}
+                    onChange={(e) => update("targetRole", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {docType === "academic-cv" ? "Institution" : "Company Name"}
+                </label>
+                <Input
+                  placeholder={docType === "academic-cv" ? "e.g., MIT" : "e.g., Google"}
+                  value={formData.company}
+                  onChange={(e) => update("company", e.target.value)}
+                />
+              </div>
+
+              {docType === "cover-letter" && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Job Description</label>
+                  <Textarea
+                    placeholder="Paste the job description..."
+                    rows={4}
+                    value={formData.jobDescription}
+                    onChange={(e) => update("jobDescription", e.target.value)}
+                  />
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted text-sm">
-              <div className="text-center">
-                <Mail className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>Generated document will appear here</p>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Resume / Background</label>
+                <Textarea
+                  placeholder="Paste your resume or background info (helps AI personalize the output)"
+                  rows={5}
+                  value={formData.resumeText}
+                  onChange={(e) => update("resumeText", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Additional Instructions</label>
+                <Textarea
+                  placeholder="Any additional details or special instructions..."
+                  rows={3}
+                  value={formData.additionalInfo}
+                  onChange={(e) => update("additionalInfo", e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sticky generate bar */}
+          <div className="sticky bottom-4 z-20">
+            <div className="p-3 rounded-2xl border border-glass-border bg-sticky-bg backdrop-blur-xl shadow-[0_-8px_30px_var(--shadow-heavy)]">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                  <div className={`h-8 w-8 rounded-lg bg-linear-to-br ${currentDocType.color} flex items-center justify-center shrink-0`}>
+                    <currentDocType.icon className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold truncate">{currentDocType.label}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">{currentDocType.description}</div>
+                  </div>
+                </div>
+                <Button
+                  onClick={generate}
+                  disabled={loading}
+                  variant="glow"
+                  className="gap-2 px-6 py-5 text-sm bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 shrink-0"
+                >
+                  {loading ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
+                  ) : (
+                    <><FileText className="h-4 w-4" /> Generate</>
+                  )}
+                </Button>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+
+        {/* Right: Output Panel (sticky) */}
+        <div className="hidden lg:block w-[480px] shrink-0">
+          <div className="sticky top-24">
+            <Card className="flex flex-col h-[calc(100vh-8rem)] relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-cyan-500/40 to-transparent" />
+              <CardContent className="p-5 flex flex-col flex-1 min-h-0">
+                <div className="flex items-center justify-between mb-4 shrink-0">
+                  <div className="flex gap-2">
+                    {latexCode && (
+                      <>
+                        <Button
+                          variant={!showLatex ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setShowLatex(false)}
+                          className="text-xs"
+                        >
+                          Preview
+                        </Button>
+                        <Button
+                          variant={showLatex ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setShowLatex(true)}
+                          className="text-xs"
+                        >
+                          LaTeX Code
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  {generatedText && (
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={copyText} className="gap-1.5 text-xs">
+                        {copied ? <CheckCircle className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copied ? "Copied!" : "Copy"}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={downloadText} className="gap-1.5 text-xs">
+                        <Download className="h-3.5 w-3.5" /> Save
+                      </Button>
+                      {latexCode && (
+                        <Button size="sm" onClick={downloadPDF} disabled={downloadingPdf} className="gap-1.5 text-xs">
+                          {downloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                          PDF
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {generatedText ? (
+                  <div className="flex-1 overflow-y-auto min-h-0">
+                    {showLatex ? (
+                      <pre className="latex-code">{latexCode}</pre>
+                    ) : (
+                      <div className="markdown-content text-sm">
+                        <ReactMarkdown>{generatedText}</ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                    <div className="text-center">
+                      <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-surface-2 border border-glass-border flex items-center justify-center">
+                        <Mail className="h-8 w-8 opacity-20" />
+                      </div>
+                      <p className="font-medium text-foreground/50">Ready to generate</p>
+                      <p className="text-xs mt-1.5 opacity-50 max-w-[200px] mx-auto leading-relaxed">
+                        Fill in the details and click Generate
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Mobile output */}
+      <div className="lg:hidden mt-6">
+        {generatedText && (
+          <Card className="relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-cyan-500/40 to-transparent" />
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex gap-2">
+                  {latexCode && (
+                    <>
+                      <Button variant={!showLatex ? "default" : "outline"} size="sm" onClick={() => setShowLatex(false)} className="text-xs">Preview</Button>
+                      <Button variant={showLatex ? "default" : "outline"} size="sm" onClick={() => setShowLatex(true)} className="text-xs">LaTeX</Button>
+                    </>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={copyText} className="gap-1.5 text-xs">
+                    {copied ? <CheckCircle className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? "Copied!" : "Copy"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={downloadText} className="gap-1.5 text-xs">
+                    <Download className="h-3.5 w-3.5" /> Save
+                  </Button>
+                </div>
+              </div>
+              <div className="max-h-[500px] overflow-y-auto">
+                {showLatex ? <pre className="latex-code">{latexCode}</pre> : <div className="markdown-content text-sm"><ReactMarkdown>{generatedText}</ReactMarkdown></div>}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </motion.div>
   );
 }

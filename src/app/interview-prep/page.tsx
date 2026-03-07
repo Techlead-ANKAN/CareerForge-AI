@@ -15,8 +15,13 @@ import {
   User,
   Bot,
 } from "lucide-react";
-import { getApiKey, generateWithRetry } from "@/lib/gemini";
+import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 import ReactMarkdown from "react-markdown";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 interface Message {
   role: "user" | "ai";
@@ -230,57 +235,66 @@ Interviewer:`;
 
   if (!interviewStarted) {
     return (
-      <div className="max-w-4xl mx-auto animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center">
-            <Mic className="w-5 h-5 text-white" />
-          </div>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="max-w-5xl mx-auto">
+        <PageHeader
+          icon={Mic}
+          title="Live Interview Prep"
+          subtitle="Practice with AI interviewer using voice or text"
+          gradient="from-rose-500 to-pink-600"
+        />
+
+        <div className="space-y-5">
+          {/* Target Role */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-9 w-9 rounded-lg bg-linear-to-br from-rose-500 to-pink-600 flex items-center justify-center">
+                  <Settings className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">Interview Configuration</h2>
+                  <p className="text-[11px] text-muted-foreground">Set up your practice session</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Target Role</label>
+                <Input
+                  placeholder="e.g., Senior Software Engineer, Product Manager"
+                  value={targetRole}
+                  onChange={(e) => setTargetRole(e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Interview Type — Horizontal Ribbon */}
           <div>
-            <h1 className="text-2xl font-bold">Live Interview Prep</h1>
-            <p className="text-sm text-muted">Practice with AI interviewer using voice or text</p>
-          </div>
-        </div>
-
-        {/* Setup */}
-        <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-          <h3 className="text-sm font-semibold mb-4">Interview Setup</h3>
-
-          <div className="mb-4">
-            <label className="text-xs font-medium text-muted mb-2 block">Target Role</label>
-            <input
-              className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-              placeholder="e.g., Senior Software Engineer, Product Manager"
-              value={targetRole}
-              onChange={(e) => setTargetRole(e.target.value)}
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="text-xs font-medium text-muted mb-2 block">Interview Type</label>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <label className="text-xs font-medium text-muted-foreground mb-2 block px-1">Interview Type</label>
+            <div className="flex gap-2 p-1.5 rounded-2xl bg-surface-1 border border-glass-border">
               {interviewTypes.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setInterviewType(t.id)}
-                  className={`text-left p-3 rounded-xl border transition-all ${
+                  className={`flex-1 px-4 py-3 rounded-xl transition-all duration-300 text-center ${
                     interviewType === t.id
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary/30"
+                      ? "bg-primary/10 border border-primary/30 shadow-[0_0_20px_rgba(139,92,246,0.12)]"
+                      : "border border-transparent hover:bg-surface-2"
                   }`}
                 >
-                  <div className="text-xs font-semibold">{t.label}</div>
-                  <div className="text-xs text-muted mt-0.5">{t.description}</div>
+                  <div className={`text-xs font-semibold ${interviewType === t.id ? "text-foreground" : "text-muted-foreground"}`}>
+                    {t.label}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/60 mt-0.5">{t.description}</div>
                 </button>
               ))}
             </div>
           </div>
 
           {interviewType === "custom" && (
-            <div className="mb-4">
-              <label className="text-xs font-medium text-muted mb-2 block">Custom Topic</label>
-              <input
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+            <div className="space-y-1.5 px-1">
+              <label className="text-xs font-medium text-muted-foreground">Custom Topic</label>
+              <Input
                 placeholder="e.g., React Performance Optimization, AWS Services"
                 value={customTopic}
                 onChange={(e) => setCustomTopic(e.target.value)}
@@ -288,102 +302,116 @@ Interviewer:`;
             </div>
           )}
 
-          <div className="mb-4">
-            <label className="text-xs font-medium text-muted mb-2 block">Difficulty</label>
-            <div className="flex gap-3">
-              {["easy", "medium", "hard"].map((d) => (
+          {/* Difficulty & Voice — side by side */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Card>
+              <CardContent className="p-5">
+                <label className="text-xs font-medium text-muted-foreground mb-3 block">Difficulty Level</label>
+                <div className="flex gap-2">
+                  {["easy", "medium", "hard"].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDifficulty(d)}
+                      className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-semibold capitalize transition-all duration-300 ${
+                        difficulty === d
+                          ? d === "easy"
+                            ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.15)]"
+                            : d === "medium"
+                              ? "bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.15)]"
+                              : "bg-red-500/10 border border-red-500/30 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.15)]"
+                          : "bg-surface-1 border border-glass-border text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <label className="text-xs font-medium text-muted-foreground mb-3 block">Voice Response</label>
                 <button
-                  key={d}
-                  onClick={() => setDifficulty(d)}
-                  className={`px-4 py-2 rounded-lg text-xs font-medium capitalize transition-all ${
-                    difficulty === d
-                      ? "bg-primary text-white"
-                      : "bg-background border border-border text-muted hover:text-foreground"
+                  onClick={() => setVoiceEnabled(!voiceEnabled)}
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                    voiceEnabled
+                      ? "bg-success/10 border border-success/30 text-success shadow-[0_0_10px_rgba(16,185,129,0.15)]"
+                      : "bg-surface-1 border border-glass-border text-muted-foreground"
                   }`}
                 >
-                  {d}
+                  <Volume2 className="h-4 w-4" />
+                  {voiceEnabled ? "Voice Enabled" : "Voice Disabled"}
                 </button>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <div className="flex items-center gap-3 mb-6">
-            <button
-              onClick={() => setVoiceEnabled(!voiceEnabled)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
-                voiceEnabled
-                  ? "bg-success/10 border border-success/30 text-success"
-                  : "bg-card border border-border text-muted"
-              }`}
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              Voice {voiceEnabled ? "On" : "Off"}
-            </button>
-          </div>
+          {/* Start Button */}
+          <Button
+            onClick={startInterview}
+            variant="glow"
+            className="w-full gap-3 py-7 text-lg bg-linear-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700"
+          >
+            <Play className="h-6 w-6" /> Start Interview
+          </Button>
         </div>
-
-        <button
-          onClick={startInterview}
-          className="w-full bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white py-4 rounded-xl font-medium text-lg transition-all flex items-center justify-center gap-3"
-        >
-          <Play className="w-6 h-6" /> Start Interview
-        </button>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in flex flex-col h-[calc(100vh-3rem)]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 shrink-0">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-8rem)]">
+      {/* Header Bar */}
+      <div className="flex items-center justify-between mb-4 shrink-0 p-3 rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center">
-            <Mic className="w-4 h-4 text-white" />
+          <div className="h-9 w-9 rounded-lg bg-linear-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.3)]">
+            <Mic className="h-4 w-4 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold">Live Interview</h1>
-            <p className="text-xs text-muted">
-              {interviewTypes.find((t) => t.id === interviewType)?.label} — {targetRole || "General"}
+            <h1 className="text-sm font-bold">Live Interview</h1>
+            <p className="text-[11px] text-muted-foreground">
+              {interviewTypes.find((t) => t.id === interviewType)?.label} • {targetRole || "General"} • <span className="capitalize">{difficulty}</span>
             </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
+            variant={voiceEnabled ? "outline" : "ghost"}
+            size="icon"
             onClick={() => setVoiceEnabled(!voiceEnabled)}
-            className={`p-2 rounded-lg border transition-all ${
-              voiceEnabled ? "border-success/30 text-success" : "border-border text-muted"
-            }`}
+            className={`h-8 w-8 ${voiceEnabled ? "border-success/30 text-success" : "text-muted-foreground"}`}
             title={voiceEnabled ? "Voice On" : "Voice Off"}
           >
-            <Volume2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={resetInterview}
-            className="flex items-center gap-1.5 px-3 py-2 bg-card border border-border rounded-lg text-xs text-muted hover:text-foreground transition-all"
-          >
-            <RotateCcw className="w-3.5 h-3.5" /> Reset
-          </button>
+            <Volume2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={resetInterview} className="gap-1.5 text-xs h-8">
+            <RotateCcw className="h-3 w-3" /> End
+          </Button>
         </div>
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+      <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 scrollbar-thin">
         {messages.map((msg, i) => (
-          <div
+          <motion.div
             key={i}
-            className={`flex gap-3 animate-fade-in ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
           >
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                 msg.role === "user"
-                  ? "bg-gradient-to-br from-emerald-500 to-teal-600"
-                  : "bg-gradient-to-br from-indigo-500 to-purple-600"
+                  ? "bg-linear-to-br from-emerald-500 to-teal-600 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                  : "bg-linear-to-br from-indigo-500 to-purple-600 shadow-[0_0_10px_rgba(99,102,241,0.2)]"
               }`}
             >
               {msg.role === "user" ? (
-                <User className="w-4 h-4 text-white" />
+                <User className="w-3.5 h-3.5 text-white" />
               ) : (
-                <Bot className="w-4 h-4 text-white" />
+                <Bot className="w-3.5 h-3.5 text-white" />
               )}
             </div>
             <div
@@ -394,24 +422,24 @@ Interviewer:`;
               <div className="markdown-content text-sm">
                 <ReactMarkdown>{msg.content}</ReactMarkdown>
               </div>
-              <div className="text-xs text-muted/50 mt-1">
+              <div className="text-[10px] text-muted-foreground/40 mt-1.5">
                 {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </div>
             </div>
-          </div>
+          </motion.div>
         ))}
 
         {loading && (
-          <div className="flex gap-3 animate-fade-in">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-              <Bot className="w-4 h-4 text-white" />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
+            <div className="w-8 h-8 rounded-xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-[0_0_10px_rgba(99,102,241,0.2)]">
+              <Bot className="w-3.5 h-3.5 text-white" />
             </div>
             <div className="chat-bubble-ai rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <Loader2 className="w-4 h-4 animate-spin" /> Thinking...
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking...
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         <div ref={chatEndRef} />
@@ -419,12 +447,12 @@ Interviewer:`;
 
       {/* Speaking Indicator */}
       {isSpeaking && (
-        <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-xl">
+        <div className="flex items-center gap-2 mb-2 px-3 py-2.5 bg-primary/10 border border-primary/20 rounded-xl backdrop-blur-sm shadow-[0_0_15px_rgba(139,92,246,0.1)]">
           <Volume2 className="w-4 h-4 text-primary animate-pulse" />
           <span className="text-xs text-primary font-medium">AI is speaking...</span>
           <button
             onClick={stopSpeaking}
-            className="ml-auto px-2 py-1 text-xs bg-primary/20 rounded-lg text-primary hover:bg-primary/30"
+            className="ml-auto px-2.5 py-1 text-xs bg-primary/20 rounded-lg text-primary hover:bg-primary/30 transition-colors"
           >
             Stop
           </button>
@@ -432,22 +460,20 @@ Interviewer:`;
       )}
 
       {/* Input Area */}
-      <div className="shrink-0 bg-card border border-border rounded-2xl p-3">
+      <div className="shrink-0 p-3 rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md">
         <div className="flex items-end gap-3">
-          <button
+          <Button
+            variant={isListening ? "destructive" : "outline"}
+            size="icon"
             onClick={isListening ? stopListening : startListening}
-            className={`p-3 rounded-xl transition-all shrink-0 ${
-              isListening
-                ? "bg-danger text-white animate-pulse-glow"
-                : "bg-background border border-border text-muted hover:text-primary hover:border-primary/50"
-            }`}
+            className={`shrink-0 h-10 w-10 rounded-xl ${isListening ? "animate-pulse-glow" : ""}`}
             title={isListening ? "Stop listening" : "Start voice input"}
           >
-            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-          </button>
+            {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </Button>
 
           <textarea
-            className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary resize-none min-h-[44px] max-h-32"
+            className="flex-1 bg-surface-2 border border-glass-border rounded-xl px-4 py-3 text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/30 focus-visible:shadow-[0_0_15px_rgba(139,92,246,0.1)] resize-none min-h-[44px] max-h-32 transition-all"
             placeholder={isListening ? "Listening... speak now" : "Type your answer or click the mic..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -455,22 +481,24 @@ Interviewer:`;
             rows={1}
           />
 
-          <button
+          <Button
             onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
-            className="p-3 bg-primary hover:bg-primary-hover text-white rounded-xl transition-all disabled:opacity-50 shrink-0"
+            title="Send message"
+            size="icon"
+            className="shrink-0 h-10 w-10 rounded-xl"
           >
-            <Send className="w-5 h-5" />
-          </button>
+            <Send className="h-4 w-4" />
+          </Button>
         </div>
 
         {isListening && (
           <div className="flex items-center gap-2 mt-2 px-2">
-            <div className="w-2 h-2 rounded-full bg-danger animate-pulse" />
-            <span className="text-xs text-danger font-medium">Recording...</span>
+            <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+            <span className="text-xs text-destructive font-medium">Recording...</span>
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

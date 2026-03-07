@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Settings, Key, CheckCircle, AlertCircle, ExternalLink, Cpu, RefreshCw } from "lucide-react";
-import { getModelOptions } from "@/lib/gemini";
+import { getModelOptions } from "@/lib/ai/gemini";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
@@ -84,158 +89,195 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto animate-fade-in">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-          <Settings className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">API Settings</h1>
-          <p className="text-sm text-muted">Configure your Gemini API key</p>
-        </div>
-      </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="max-w-5xl mx-auto">
+      <PageHeader
+        icon={Settings}
+        title="API Settings"
+        subtitle="Configure your Gemini API key"
+      />
 
-      {/* Status */}
-      <div className={`flex items-center gap-3 p-4 rounded-xl border mb-6 ${
-        hasKey ? "bg-success/10 border-success/30" : "bg-accent/10 border-accent/30"
+      {/* Status Banner */}
+      <div className={`mb-6 p-4 rounded-2xl border transition-all duration-300 flex items-center gap-3 ${
+        hasKey
+          ? "border-success/30 bg-success/5 shadow-[0_0_20px_rgba(16,185,129,0.08)]"
+          : "border-amber-500/30 bg-amber-500/5 shadow-[0_0_20px_rgba(245,158,11,0.08)]"
       }`}>
         {hasKey ? (
-          <CheckCircle className="w-5 h-5 text-success" />
+          <CheckCircle className="h-5 w-5 text-success shrink-0" />
         ) : (
-          <AlertCircle className="w-5 h-5 text-accent" />
+          <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
         )}
-        <span className={`text-sm font-medium ${hasKey ? "text-success" : "text-accent"}`}>
-          {hasKey ? "API key configured" : "No API key set — features won't work without it"}
+        <span className={`text-sm font-medium ${hasKey ? "text-success" : "text-amber-500"}`}>
+          {hasKey ? "API key configured — all features are active" : "No API key set — features won't work without it"}
         </span>
       </div>
 
-      {/* API Key Input */}
-      <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Key className="w-4 h-4 text-primary" />
-          <label className="text-sm font-semibold">Gemini API Key</label>
-        </div>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Enter your Gemini API key..."
-          className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors mb-4"
-        />
-        <div className="flex gap-3">
-          <button
-            onClick={handleSave}
-            className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
-          >
-            {saved ? "Saved!" : "Save Key"}
-          </button>
-          {hasKey && (
-            <button
-              onClick={handleClear}
-              className="bg-danger/20 hover:bg-danger/30 text-danger px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
-            >
-              Clear Key
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Model Selection */}
-      <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-        <div className="flex items-center gap-2 mb-2">
-          <Cpu className="w-4 h-4 text-primary" />
-          <label className="text-sm font-semibold">AI Model</label>
-          {modelSaved && <span className="text-xs text-success ml-2">Saved!</span>}
-        </div>
-        <p className="text-xs text-muted mb-4">
-          If you hit quota limits on one model, switch to another. gemini-1.5-flash typically has higher free-tier limits.
-        </p>
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          {getModelOptions().map((model) => (
-            <button
-              key={model}
-              onClick={() => handleModelChange(model)}
-              className={`text-left p-3 rounded-xl border transition-all ${
-                selectedModel === model
-                  ? "border-primary bg-primary/10"
-                  : "border-border hover:border-primary/30"
-              }`}
-            >
-              <div className="text-sm font-medium">{model}</div>
-              <div className="text-xs text-muted mt-0.5">
-                {model === "gemini-2.0-flash" && "Newest & fastest"}
-                {model === "gemini-1.5-flash" && "High free-tier quota"}
-                {model === "gemini-1.5-flash-latest" && "Latest 1.5 flash"}
-                {model === "gemini-1.5-pro" && "Most capable (lower quota)"}
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Left: API Key */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="h-9 w-9 rounded-lg bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                <Key className="h-4 w-4 text-white" />
               </div>
-            </button>
-          ))}
-        </div>
+              <div>
+                <h2 className="text-sm font-bold">Gemini API Key</h2>
+                <p className="text-[11px] text-muted-foreground">Your key is stored locally in the browser</p>
+              </div>
+            </div>
+            <div className="space-y-1.5 mb-4">
+              <label className="text-xs font-medium text-muted-foreground">API Key</label>
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter your Gemini API key..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button onClick={handleSave} className="gap-1.5">
+                {saved ? (
+                  <><CheckCircle className="h-3.5 w-3.5" /> Saved!</>
+                ) : (
+                  "Save Key"
+                )}
+              </Button>
+              {hasKey && (
+                <Button variant="destructive" onClick={handleClear} size="sm">
+                  Clear Key
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Test Connection Button */}
-        <button
-          onClick={testConnection}
-          disabled={testing}
-          className="flex items-center gap-2 bg-secondary/20 hover:bg-secondary/30 text-secondary px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${testing ? "animate-spin" : ""}`} />
-          {testing ? "Testing..." : "Test Connection"}
-        </button>
+        {/* Right: Model Selection */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-9 w-9 rounded-lg bg-linear-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                <Cpu className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold">AI Model</h2>
+                {modelSaved && <span className="text-[11px] text-success">Saved!</span>}
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-4">
+              If you hit quota limits on one model, switch to another.
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {getModelOptions().map((model) => (
+                <button
+                  key={model}
+                  onClick={() => handleModelChange(model)}
+                  className={`text-left p-3 rounded-xl border transition-all duration-300 ${
+                    selectedModel === model
+                      ? "border-primary/40 bg-primary/10 shadow-[0_0_15px_rgba(139,92,246,0.12)] ring-1 ring-primary/20"
+                      : "border-glass-border bg-glass-bg hover:border-[rgba(139,92,246,0.2)] hover:bg-surface-3"
+                  }`}
+                >
+                  <div className="text-xs font-semibold">{model}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    {model === "gemini-2.0-flash" && "Newest & fastest"}
+                    {model === "gemini-1.5-flash" && "High free-tier quota"}
+                    {model === "gemini-1.5-flash-latest" && "Latest 1.5 flash"}
+                    {model === "gemini-1.5-pro" && "Most capable (lower quota)"}
+                  </div>
+                </button>
+              ))}
+            </div>
 
-        {testResult && (
-          <div className={`mt-3 p-3 rounded-xl border text-sm ${
-            testResult.ok
-              ? "bg-success/10 border-success/30 text-success"
-              : "bg-danger/10 border-danger/30 text-danger"
-          }`}>
-            {testResult.message}
-          </div>
-        )}
+            <Button
+              variant="secondary"
+              onClick={testConnection}
+              disabled={testing}
+              className="gap-2 w-full"
+            >
+              <RefreshCw className={`h-4 w-4 ${testing ? "animate-spin" : ""}`} />
+              {testing ? "Testing..." : "Test Connection"}
+            </Button>
+
+            {testResult && (
+              <div className={`mt-3 p-3 rounded-xl border text-xs backdrop-blur-sm ${
+                testResult.ok
+                  ? "bg-success/10 border-success/30 text-success"
+                  : "bg-destructive/10 border-destructive/30 text-destructive"
+              }`}>
+                {testResult.message}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Quota Tips */}
-      <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-        <h3 className="text-sm font-semibold mb-3">💡 Quota & Rate Limit Tips</h3>
-        <ul className="space-y-2 text-sm text-muted">
-          <li>• Free tier has limited requests per minute/day per model</li>
-          <li>• If you hit quota on <strong className="text-foreground">gemini-2.0-flash</strong>, switch to <strong className="text-foreground">gemini-1.5-flash</strong></li>
-          <li>• The app automatically retries with backoff and falls back to other models</li>
-          <li>• Use the <strong className="text-foreground">Test Connection</strong> button to verify which model works</li>
-          <li>• Wait 1-2 minutes between heavy operations to avoid rate limits</li>
-          <li>• Consider using multiple API keys if you need higher throughput</li>
-        </ul>
-      </div>
+      {/* Tips & Instructions — full width grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <span className="text-base">💡</span> Quota & Rate Limit Tips
+            </h3>
+            <ul className="space-y-2.5 text-xs text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+                Free tier has limited requests per minute/day per model
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+                If you hit quota on <strong className="text-foreground">gemini-2.0-flash</strong>, switch to <strong className="text-foreground">gemini-1.5-flash</strong>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+                The app automatically retries with backoff and falls back to other models
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+                Use the <strong className="text-foreground">Test Connection</strong> button to verify which model works
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+                Wait 1-2 minutes between heavy operations to avoid rate limits
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
 
-      {/* Instructions */}
-      <div className="bg-card border border-border rounded-2xl p-6">
-        <h3 className="text-sm font-semibold mb-3">How to get a Gemini API Key</h3>
-        <ol className="space-y-2 text-sm text-muted">
-          <li className="flex items-start gap-2">
-            <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 shrink-0">1</span>
-            Visit Google AI Studio
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 shrink-0">2</span>
-            Sign in with your Google account
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 shrink-0">3</span>
-            Click &ldquo;Get API Key&rdquo; and create a key
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 shrink-0">4</span>
-            Paste the key above and save
-          </li>
-        </ol>
-        <a
-          href="https://aistudio.google.com/apikey"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 mt-4 text-sm text-primary hover:text-primary-hover transition-colors"
-        >
-          Open Google AI Studio <ExternalLink className="w-3.5 h-3.5" />
-        </a>
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <span className="text-base">🔑</span> How to get a Gemini API Key
+            </h3>
+            <ol className="space-y-2.5 text-xs text-muted-foreground">
+              <li className="flex items-start gap-2.5">
+                <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 shrink-0">1</span>
+                Visit Google AI Studio
+              </li>
+              <li className="flex items-start gap-2.5">
+                <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 shrink-0">2</span>
+                Sign in with your Google account
+              </li>
+              <li className="flex items-start gap-2.5">
+                <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 shrink-0">3</span>
+                Click &ldquo;Get API Key&rdquo; and create a key
+              </li>
+              <li className="flex items-start gap-2.5">
+                <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 shrink-0">4</span>
+                Paste the key above and save
+              </li>
+            </ol>
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 mt-4 text-xs text-primary hover:text-primary-hover transition-colors font-medium"
+            >
+              Open Google AI Studio <ExternalLink className="h-3 w-3" />
+            </a>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </motion.div>
   );
 }

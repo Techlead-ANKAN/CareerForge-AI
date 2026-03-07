@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { motion } from "framer-motion";
 import {
   FileText,
   Wand2,
@@ -21,8 +22,14 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { getApiKey, generateWithRetry } from "@/lib/gemini";
-import { RESUME_TEMPLATES, getTemplateById } from "@/lib/templates";
+import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
+import { RESUME_TEMPLATES, getTemplateById } from "@/lib/data/templates";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 interface EducationEntry {
   id: string;
@@ -505,546 +512,709 @@ ${fixedCode}`;
   const currentTemplate = getTemplateById(selectedTemplate);
 
   return (
-    <div className="max-w-7xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-          <FileText className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Resume Builder</h1>
-          <p className="text-sm text-muted">
-            Choose a template, add your details & photo, AI generates a professional LaTeX resume
-          </p>
-        </div>
-      </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="max-w-[1440px] mx-auto"
+    >
+      <PageHeader
+        icon={FileText}
+        title="Resume Builder"
+        subtitle="Choose a template, add your details & photo, AI generates a professional LaTeX resume"
+        gradient="from-violet-500 to-purple-600"
+      />
 
       {error && (
-        <div className="bg-danger/10 border border-danger/30 text-danger rounded-xl px-4 py-3 mb-6 text-sm whitespace-pre-line">
+        <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-xl px-4 py-3 mb-6 text-sm whitespace-pre-line">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Form */}
-        <div className="space-y-4">
-          {/* Section Tabs */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {sections.map((s) => (
+      <div className="flex gap-6">
+        {/* Left: Vertical Step Nav */}
+        <div className="hidden lg:flex flex-col gap-1 w-48 shrink-0 sticky top-24 self-start">
+          {sections.map((s, i) => {
+            const isActive = activeSection === s.id;
+            const sectionIndex = sections.findIndex((sec) => sec.id === activeSection);
+            const isPast = i < sectionIndex;
+            return (
               <button
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                  activeSection === s.id
-                    ? "bg-primary text-white"
-                    : "bg-card border border-border text-muted hover:text-foreground"
+                className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-300 ${
+                  isActive
+                    ? "bg-primary/10 border border-primary/30 shadow-[0_0_20px_rgba(139,92,246,0.12)]"
+                    : isPast
+                      ? "border border-transparent hover:bg-surface-2"
+                      : "border border-transparent hover:bg-surface-2"
                 }`}
               >
-                <s.icon className="w-3.5 h-3.5" />
-                {s.label}
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-300 ${
+                    isActive
+                      ? "bg-primary text-white shadow-[0_0_12px_rgba(139,92,246,0.4)]"
+                      : isPast
+                        ? "bg-primary/20 text-primary"
+                        : "bg-surface-4 text-muted-foreground group-hover:text-foreground"
+                  }`}
+                >
+                  {isPast ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <s.icon className="h-4 w-4" />
+                  )}
+                </div>
+                <div>
+                  <span
+                    className={`text-xs font-medium block transition-colors ${
+                      isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/50">Step {i + 1}</span>
+                </div>
               </button>
-            ))}
-          </div>
+            );
+          })}
 
+          {/* Vertical progress line */}
+          <div className="mt-4 mx-auto w-px h-8 bg-linear-to-b from-primary/30 to-transparent" />
+
+          {/* Template info mini card at bottom of stepper */}
+          <div className="mt-2 p-3 rounded-xl border border-glass-border bg-glass-bg">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className={`h-7 w-7 rounded-md bg-linear-to-br ${currentTemplate.color} flex items-center justify-center text-sm shrink-0`}>
+                {currentTemplate.preview}
+              </div>
+              <span className="text-[11px] font-semibold truncate">{currentTemplate.name}</span>
+            </div>
+            {photoPreview && currentTemplate.hasPhoto && (
+              <div className="flex items-center gap-2 mt-1">
+                <img src={photoPreview} alt="" className="h-5 w-5 rounded-full object-cover ring-1 ring-primary/30" />
+                <span className="text-[10px] text-muted-foreground">Photo attached</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile: Horizontal tabs (only visible on small screens) */}
+        <div className="lg:hidden flex flex-wrap gap-2 mb-4 p-1 rounded-xl bg-surface-1 border border-glass-border w-full">
+          {sections.map((s) => (
+            <Button
+              key={s.id}
+              variant={activeSection === s.id ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveSection(s.id)}
+              className={`gap-1.5 text-xs rounded-lg transition-all duration-200 ${
+                activeSection === s.id
+                  ? "shadow-[0_0_15px_rgba(139,92,246,0.3)] bg-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <s.icon className="h-3.5 w-3.5" />
+              {s.label}
+            </Button>
+          ))}
+        </div>
+
+        {/* Center: Form Content */}
+        <div className="flex-1 min-w-0 space-y-5">
           {/* Template Selection */}
           {activeSection === "template" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Layout className="w-4 h-4 text-primary" /> Choose Your Template
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold flex items-center gap-2.5">
+                    <Layout className="h-5 w-5 text-primary" />
+                    <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Choose Your Template</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">Select the style that best fits your target role</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {RESUME_TEMPLATES.map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setSelectedTemplate(t.id)}
-                    className={`text-left p-3 rounded-xl border-2 transition-all ${
+                    className={`group text-left p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden ${
                       selectedTemplate === t.id
-                        ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
-                        : "border-border hover:border-primary/30 bg-background"
+                        ? "border-primary/40 bg-primary/10 shadow-[0_0_30px_rgba(139,92,246,0.15)] ring-1 ring-primary/20"
+                        : "border-glass-border bg-glass-bg hover:border-[rgba(139,92,246,0.2)] hover:bg-surface-3 hover:shadow-[0_0_20px_rgba(139,92,246,0.06)]"
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${t.color} flex items-center justify-center text-lg`}>
+                    {selectedTemplate === t.id && (
+                      <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-primary/60 to-transparent" />
+                    )}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`h-12 w-12 rounded-xl bg-linear-to-br ${t.color} flex items-center justify-center text-xl shadow-lg`}>
                         {t.preview}
                       </div>
                       {selectedTemplate === t.id && (
-                        <CheckCircle className="w-5 h-5 text-primary" />
+                        <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center shadow-[0_0_10px_rgba(139,92,246,0.4)]">
+                          <CheckCircle className="h-3.5 w-3.5 text-white" />
+                        </div>
                       )}
                     </div>
-                    <h4 className="text-xs font-semibold mb-0.5">{t.name}</h4>
-                    <p className="text-xs text-muted leading-snug">{t.description}</p>
-                    <div className="mt-2 flex gap-1.5">
+                    <h4 className="text-sm font-semibold mb-1">{t.name}</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{t.description}</p>
+                    <div className="mt-3 flex gap-2">
                       {t.hasPhoto && (
-                        <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                          📷 Photo
-                        </span>
+                        <Badge variant="secondary" className="text-[10px] px-2 py-0.5">📷 Photo</Badge>
                       )}
-                      <span className="text-xs bg-card border border-border px-1.5 py-0.5 rounded">
-                        LaTeX
-                      </span>
+                      <Badge variant="outline" className="text-[10px] px-2 py-0.5">LaTeX</Badge>
                     </div>
                   </button>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Photo Upload */}
           {activeSection === "photo" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Camera className="w-4 h-4 text-primary" /> Profile Photo
-              </h3>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <Card>
+                <CardContent className="p-6 space-y-5">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2.5">
+                      <Camera className="h-5 w-5 text-primary" />
+                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Profile Photo</span>
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-1">Add a professional headshot for photo-compatible templates</p>
+                  </div>
               
-              {!currentTemplate.hasPhoto && (
-                <div className="bg-accent/10 border border-accent/30 text-accent rounded-xl px-4 py-3 text-xs">
-                  ⚠️ The "{currentTemplate.name}" template doesn't support photos. Choose a photo-compatible template (Modern Professional, Creative Modern, Tech Developer, or Executive Premium).
-                </div>
-              )}
+                  {!currentTemplate.hasPhoto && (
+                    <div className="bg-warning/10 border border-warning/30 text-warning rounded-xl px-4 py-3 text-xs">
+                      ⚠️ The &ldquo;{currentTemplate.name}&rdquo; template doesn&apos;t support photos. Choose a photo-compatible template.
+                    </div>
+                  )}
 
-              <div className="flex items-start gap-6">
-                {/* Upload Area */}
-                <div className="flex-1">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                      currentTemplate.hasPhoto
-                        ? "border-primary/30 hover:border-primary/60 hover:bg-primary/5"
-                        : "border-border opacity-50 cursor-not-allowed"
-                    }`}
-                  >
-                    <ImagePlus className="w-8 h-8 mx-auto mb-2 text-muted" />
-                    <p className="text-sm font-medium text-muted">Click to upload photo</p>
-                    <p className="text-xs text-muted/60 mt-1">JPG, PNG — Max 5MB</p>
+                  <div className="flex items-start gap-8">
+                    <div className="flex-1">
+                      <div
+                        onClick={() => currentTemplate.hasPhoto && fileInputRef.current?.click()}
+                        className={`border border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300 ${
+                          currentTemplate.hasPhoto
+                            ? "border-primary/30 hover:border-primary/50 hover:bg-primary/5 hover:shadow-[0_0_25px_rgba(139,92,246,0.1)]"
+                            : "border-glass-border opacity-50 cursor-not-allowed"
+                        }`}
+                      >
+                        <div className="h-14 w-14 mx-auto mb-3 rounded-2xl bg-primary/10 flex items-center justify-center">
+                          <ImagePlus className="w-7 h-7 text-primary/60" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground/80">Click to upload photo</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1.5">JPG, PNG — Max 5MB</p>
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg"
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                        disabled={!currentTemplate.hasPhoto}
+                        title="Upload profile photo"
+                      />
+                    </div>
+
+                    {photoPreview && (
+                      <div className="relative">
+                        <div className="rounded-full p-1 bg-linear-to-br from-primary/40 to-violet-500/40 shadow-[0_0_25px_rgba(139,92,246,0.2)]">
+                          <img
+                            src={photoPreview}
+                            alt="Profile preview"
+                            className="w-32 h-32 rounded-full object-cover"
+                          />
+                        </div>
+                        <button
+                          onClick={removePhoto}
+                          title="Remove photo"
+                          className="absolute -top-1 -right-1 w-7 h-7 bg-danger text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/jpg"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                    disabled={!currentTemplate.hasPhoto}
-                  />
-                </div>
 
-                {/* Photo Preview */}
-                {photoPreview && (
-                  <div className="relative">
-                    <img
-                      src={photoPreview}
-                      alt="Profile preview"
-                      className="w-28 h-28 rounded-full object-cover border-2 border-primary shadow-lg"
-                    />
-                    <button
-                      onClick={removePhoto}
-                      className="absolute -top-1 -right-1 w-6 h-6 bg-danger text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {photoBase64 && (
-                <div className="bg-success/10 border border-success/30 text-success rounded-xl px-4 py-2 text-xs flex items-center gap-2">
-                  <CheckCircle className="w-3.5 h-3.5" /> Photo uploaded successfully. It will be included in your resume.
-                </div>
-              )}
-            </div>
+                  {photoBase64 && (
+                    <div className="bg-success/10 border border-success/30 text-success rounded-xl px-4 py-2.5 text-xs flex items-center gap-2">
+                      <CheckCircle className="h-3.5 w-3.5" /> Photo uploaded successfully. It will be included in your resume.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
           {/* Personal Info */}
           {activeSection === "personal" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <User className="w-4 h-4 text-primary" /> Personal Information
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  className="col-span-2 bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                  placeholder="Full Name *"
-                  value={form.fullName}
-                  onChange={(e) => updateForm("fullName", e.target.value)}
-                />
-                <input
-                  className="bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                  placeholder="Email"
-                  value={form.email}
-                  onChange={(e) => updateForm("email", e.target.value)}
-                />
-                <input
-                  className="bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                  placeholder="Phone"
-                  value={form.phone}
-                  onChange={(e) => updateForm("phone", e.target.value)}
-                />
-                <input
-                  className="bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                  placeholder="Location"
-                  value={form.location}
-                  onChange={(e) => updateForm("location", e.target.value)}
-                />
-                <input
-                  className="bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                  placeholder="LinkedIn URL"
-                  value={form.linkedin}
-                  onChange={(e) => updateForm("linkedin", e.target.value)}
-                />
-                <input
-                  className="col-span-2 bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                  placeholder="GitHub URL"
-                  value={form.github}
-                  onChange={(e) => updateForm("github", e.target.value)}
-                />
-              </div>
-            </div>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <Card>
+                <CardContent className="p-6 space-y-5">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2.5">
+                      <User className="h-5 w-5 text-primary" />
+                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Personal Information</span>
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-1">Your contact details for the resume header</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Full Name *</label>
+                      <Input
+                        placeholder="John Doe"
+                        value={form.fullName}
+                        onChange={(e) => updateForm("fullName", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Email</label>
+                      <Input
+                        placeholder="john@example.com"
+                        value={form.email}
+                        onChange={(e) => updateForm("email", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Phone</label>
+                      <Input
+                        placeholder="+1 (555) 123-4567"
+                        value={form.phone}
+                        onChange={(e) => updateForm("phone", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Location</label>
+                      <Input
+                        placeholder="San Francisco, CA"
+                        value={form.location}
+                        onChange={(e) => updateForm("location", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">LinkedIn URL</label>
+                      <Input
+                        placeholder="linkedin.com/in/johndoe"
+                        value={form.linkedin}
+                        onChange={(e) => updateForm("linkedin", e.target.value)}
+                      />
+                    </div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">GitHub URL</label>
+                      <Input
+                        placeholder="github.com/johndoe"
+                        value={form.github}
+                        onChange={(e) => updateForm("github", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
           {/* Target Role */}
           {activeSection === "role" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-primary" /> Target Role
-              </h3>
-              <input
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                placeholder="Target Role (e.g., Senior Software Engineer) *"
-                value={form.targetRole}
-                onChange={(e) => updateForm("targetRole", e.target.value)}
-              />
-              {/* Job Description - textarea + upload */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted">Job Description (optional — helps AI tailor your resume)</label>
-                  <div className="flex items-center gap-2">
-                    {jdFileName && !jdLoading && (
-                      <span className="flex items-center gap-1.5 text-xs text-success bg-success/10 border border-success/20 px-2 py-1 rounded-lg">
-                        <CheckCircle className="w-3 h-3" /> {jdFileName}
-                        <button onClick={clearJDFile} className="text-danger/60 hover:text-danger ml-1">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    )}
-                    {jdLoading && (
-                      <span className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Extracting text...
-                      </span>
-                    )}
-                    <button
-                      onClick={() => jdFileInputRef.current?.click()}
-                      disabled={jdLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg text-xs font-medium hover:bg-primary/20 transition-all disabled:opacity-50"
-                    >
-                      <Upload className="w-3.5 h-3.5" /> Upload File
-                    </button>
-                    <input
-                      ref={jdFileInputRef}
-                      type="file"
-                      accept=".txt,.text,.md,.pdf"
-                      onChange={handleJDUpload}
-                      className="hidden"
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <Card>
+                <CardContent className="p-6 space-y-5">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2.5">
+                      <Briefcase className="h-5 w-5 text-primary" />
+                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Target Role</span>
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-1">Define your target position — AI will tailor the resume</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Role Title *</label>
+                    <Input
+                      placeholder="Senior Software Engineer"
+                      value={form.targetRole}
+                      onChange={(e) => updateForm("targetRole", e.target.value)}
                     />
                   </div>
-                </div>
-                <textarea
-                  className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                  placeholder="Paste the job description here, or upload a file above..."
-                  rows={6}
-                  value={form.jobDescription}
-                  onChange={(e) => {
-                    updateForm("jobDescription", e.target.value);
-                    if (jdFileName) setJdFileName(null);
-                  }}
-                />
-              </div>
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder="Professional summary (optional - AI can generate one)"
-                rows={3}
-                value={form.summary}
-                onChange={(e) => updateForm("summary", e.target.value)}
-              />
-            </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-muted-foreground">Job Description (optional — helps AI tailor your resume)</label>
+                      <div className="flex items-center gap-2">
+                        {jdFileName && !jdLoading && (
+                          <span className="flex items-center gap-1.5 text-xs text-success bg-success/10 border border-success/20 px-2 py-1 rounded-lg">
+                            <CheckCircle className="w-3 h-3" /> {jdFileName}
+                            <button onClick={clearJDFile} title="Clear job description" className="text-danger/60 hover:text-danger ml-1">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                        {jdLoading && (
+                          <span className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Extracting text...
+                          </span>
+                        )}
+                        <button
+                          onClick={() => jdFileInputRef.current?.click()}
+                          disabled={jdLoading}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg text-xs font-medium hover:bg-primary/20 transition-all disabled:opacity-50"
+                        >
+                          <Upload className="h-3.5 w-3.5" /> Upload File
+                        </button>
+                        <input
+                          ref={jdFileInputRef}
+                          type="file"
+                          accept=".txt,.text,.md,.pdf"
+                          onChange={handleJDUpload}
+                          className="hidden"
+                          title="Upload job description file"
+                        />
+                      </div>
+                    </div>
+                    <Textarea
+                      placeholder="Paste the job description here, or upload a file above..."
+                      rows={6}
+                      value={form.jobDescription}
+                      onChange={(e) => {
+                        updateForm("jobDescription", e.target.value);
+                        if (jdFileName) setJdFileName(null);
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Professional Summary</label>
+                    <Textarea
+                      placeholder="Write a brief summary or leave blank for AI to generate one"
+                      rows={3}
+                      value={form.summary}
+                      onChange={(e) => updateForm("summary", e.target.value)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
           {/* Education */}
           {activeSection === "education" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4 text-primary" /> Education
-                </h3>
-                <button
+                <div>
+                  <h2 className="text-lg font-bold flex items-center gap-2.5">
+                    <GraduationCap className="h-5 w-5 text-primary" />
+                    <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Education</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">Add your educational background</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={addEducation}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg text-xs font-medium hover:bg-primary/20 transition-all"
+                  className="gap-1.5 text-xs"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Education
-                </button>
+                  <Plus className="h-3.5 w-3.5" /> Add Entry
+                </Button>
               </div>
 
               {educations.map((edu, idx) => (
-                <div
-                  key={edu.id}
-                  className="bg-background border border-border rounded-xl p-4 space-y-3 relative"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-muted">Education {idx + 1}</span>
-                    {educations.length > 1 && (
-                      <button
-                        onClick={() => removeEducation(edu.id)}
-                        className="flex items-center gap-1 px-2 py-1 text-danger/70 hover:text-danger hover:bg-danger/10 rounded-lg text-xs transition-all"
-                      >
-                        <Trash2 className="w-3 h-3" /> Remove
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Degree & Field */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      className="bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
-                      placeholder="Degree (e.g., B.Tech, B.Sc, MBA)"
-                      value={edu.degree}
-                      onChange={(e) => updateEducation(edu.id, "degree", e.target.value)}
-                    />
-                    <input
-                      className="bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
-                      placeholder="Field of Study (e.g., Computer Science)"
-                      value={edu.fieldOfStudy}
-                      onChange={(e) => updateEducation(edu.id, "fieldOfStudy", e.target.value)}
-                    />
-                  </div>
-
-                  {/* Institution */}
-                  <input
-                    className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
-                    placeholder="Institution / University Name"
-                    value={edu.institution}
-                    onChange={(e) => updateEducation(edu.id, "institution", e.target.value)}
-                  />
-
-                  {/* Start & End Year */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted mb-1 block">Start Year</label>
-                      <input
-                        type="number"
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
-                        placeholder="e.g., 2020"
-                        min="1970"
-                        max="2040"
-                        value={edu.startYear}
-                        onChange={(e) => updateEducation(edu.id, "startYear", e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted mb-1 block">End Year (or Expected)</label>
-                      <input
-                        type="number"
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
-                        placeholder="e.g., 2024"
-                        min="1970"
-                        max="2040"
-                        value={edu.endYear}
-                        onChange={(e) => updateEducation(edu.id, "endYear", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Marks / Grade */}
-                  <div>
-                    <label className="text-xs text-muted mb-1.5 block">Marks / Grade</label>
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
-                      <div className="flex rounded-xl border border-border overflow-hidden bg-card">
-                        {gradeTypes.map((gt) => (
-                          <button
-                            key={gt.value}
-                            onClick={() => {
-                              updateEducation(edu.id, "gradeType", gt.value);
-                              if (gt.defaultScale) {
-                                updateEducation(edu.id, "gradeScale", gt.defaultScale);
-                              } else {
-                                updateEducation(edu.id, "gradeScale", "");
-                              }
-                            }}
-                            className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
-                              edu.gradeType === gt.value
-                                ? "bg-primary text-white"
-                                : "text-muted hover:text-foreground"
-                            }`}
-                          >
-                            {gt.label}
-                          </button>
-                        ))}
-                      </div>
-                      <input
-                        className="w-20 bg-card border border-border rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:border-primary"
-                        placeholder={edu.gradeType === "Grade" ? "A+" : "9.1"}
-                        value={edu.gradeValue}
-                        onChange={(e) => updateEducation(edu.id, "gradeValue", e.target.value)}
-                      />
-                      {edu.gradeType !== "Grade" && (
-                        <div className="flex items-center gap-1 text-sm text-muted">
-                          <span>/</span>
-                          <input
-                            className="w-14 bg-card border border-border rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:border-primary"
-                            placeholder="10"
-                            value={edu.gradeScale}
-                            onChange={(e) => updateEducation(edu.id, "gradeScale", e.target.value)}
-                          />
+                <Card key={edu.id}>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-md bg-primary/15 flex items-center justify-center">
+                          <span className="text-[10px] font-bold text-primary">{idx + 1}</span>
                         </div>
+                        <span className="text-xs font-semibold text-muted-foreground">Education Entry</span>
+                      </div>
+                      {educations.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeEducation(edu.id)}
+                          className="gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 h-7"
+                        >
+                          <Trash2 className="h-3 w-3" /> Remove
+                        </Button>
                       )}
                     </div>
-                  </div>
 
-                  {/* Relevant Coursework */}
-                  <div>
-                    <label className="text-xs text-muted mb-1 block">Relevant Coursework (optional)</label>
-                    <input
-                      className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
-                      placeholder="e.g., Data Structures, Algorithms, Machine Learning, DBMS"
-                      value={edu.coursework}
-                      onChange={(e) => updateEducation(edu.id, "coursework", e.target.value)}
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Degree</label>
+                        <Input
+                          placeholder="B.Tech, B.Sc, MBA..."
+                          value={edu.degree}
+                          onChange={(e) => updateEducation(edu.id, "degree", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Field of Study</label>
+                        <Input
+                          placeholder="Computer Science"
+                          value={edu.fieldOfStudy}
+                          onChange={(e) => updateEducation(edu.id, "fieldOfStudy", e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted-foreground">Institution</label>
+                      <Input
+                        placeholder="University Name"
+                        value={edu.institution}
+                        onChange={(e) => updateEducation(edu.id, "institution", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Start Year</label>
+                        <Input
+                          type="number"
+                          placeholder="2020"
+                          min={1970}
+                          max={2040}
+                          value={edu.startYear}
+                          onChange={(e) => updateEducation(edu.id, "startYear", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">End Year (or Expected)</label>
+                        <Input
+                          type="number"
+                          placeholder="2024"
+                          min={1970}
+                          max={2040}
+                          value={edu.endYear}
+                          onChange={(e) => updateEducation(edu.id, "endYear", e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted-foreground">Marks / Grade</label>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <div className="flex rounded-xl border border-glass-border overflow-hidden bg-surface-1">
+                          {gradeTypes.map((gt) => (
+                            <button
+                              key={gt.value}
+                              onClick={() => {
+                                updateEducation(edu.id, "gradeType", gt.value);
+                                if (gt.defaultScale) {
+                                  updateEducation(edu.id, "gradeScale", gt.defaultScale);
+                                } else {
+                                  updateEducation(edu.id, "gradeScale", "");
+                                }
+                              }}
+                              className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
+                                edu.gradeType === gt.value
+                                  ? "bg-primary text-white shadow-[0_0_10px_rgba(139,92,246,0.3)]"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-surface-4"
+                              }`}
+                            >
+                              {gt.label}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          className="w-20 bg-surface-2 border border-glass-border rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:border-primary/40 focus:shadow-[0_0_10px_rgba(139,92,246,0.1)] transition-all"
+                          placeholder={edu.gradeType === "Grade" ? "A+" : "9.1"}
+                          value={edu.gradeValue}
+                          onChange={(e) => updateEducation(edu.id, "gradeValue", e.target.value)}
+                        />
+                        {edu.gradeType !== "Grade" && (
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <span>/</span>
+                            <input
+                              className="w-14 bg-surface-2 border border-glass-border rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:border-primary/40 focus:shadow-[0_0_10px_rgba(139,92,246,0.1)] transition-all"
+                              placeholder="10"
+                              value={edu.gradeScale}
+                              onChange={(e) => updateEducation(edu.id, "gradeScale", e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted-foreground">Relevant Coursework (optional)</label>
+                      <Input
+                        placeholder="Data Structures, Algorithms, Machine Learning..."
+                        value={edu.coursework}
+                        onChange={(e) => updateEducation(edu.id, "coursework", e.target.value)}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
 
               {educations.length > 0 && (
-                <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5 text-xs text-muted">
+                <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5 text-xs text-muted-foreground backdrop-blur-sm">
                   <span className="text-primary font-medium">{educations.filter((e) => e.degree || e.institution).length}</span> education {educations.filter((e) => e.degree || e.institution).length === 1 ? "entry" : "entries"} added
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
 
           {/* Experience */}
           {activeSection === "experience" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-primary" /> Work Experience
-              </h3>
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder={"List your work experience\n\nExample:\nSoftware Engineer at Google, Jan 2023 - Present\n- Built microservices handling 1M+ requests/day\n- Reduced API latency by 40%"}
-                rows={10}
-                value={form.experience}
-                onChange={(e) => updateForm("experience", e.target.value)}
-              />
-            </div>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <Card>
+                <CardContent className="p-6 space-y-5">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2.5">
+                      <Briefcase className="h-5 w-5 text-primary" />
+                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Work Experience</span>
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-1">Describe your professional experience with achievements</p>
+                  </div>
+                  <Textarea
+                    placeholder={"List your work experience\n\nExample:\nSoftware Engineer at Google, Jan 2023 - Present\n- Built microservices handling 1M+ requests/day\n- Reduced API latency by 40%"}
+                    rows={12}
+                    value={form.experience}
+                    onChange={(e) => updateForm("experience", e.target.value)}
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
           {/* Projects */}
           {activeSection === "projects" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Code className="w-4 h-4 text-primary" /> Projects
-              </h3>
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder={"List your key projects\n\nExample:\nAI Chat Application | React, Node.js, OpenAI API\n- Built a real-time chat app with AI responses\n- 500+ active users"}
-                rows={10}
-                value={form.projects}
-                onChange={(e) => updateForm("projects", e.target.value)}
-              />
-            </div>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <Card>
+                <CardContent className="p-6 space-y-5">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2.5">
+                      <Code className="h-5 w-5 text-primary" />
+                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Projects</span>
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-1">Showcase your best personal or open-source projects</p>
+                  </div>
+                  <Textarea
+                    placeholder={"List your key projects\n\nExample:\nAI Chat Application | React, Node.js, OpenAI API\n- Built a real-time chat app with AI responses\n- 500+ active users"}
+                    rows={12}
+                    value={form.projects}
+                    onChange={(e) => updateForm("projects", e.target.value)}
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
           {/* Skills & Achievements */}
           {activeSection === "skills" && (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-primary" /> Skills & Achievements
-              </h3>
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder={"Skills (comma separated)\n\nExample: Python, Java, React, Node.js, AWS, Docker, Git"}
-                rows={4}
-                value={form.skills}
-                onChange={(e) => updateForm("skills", e.target.value)}
-              />
-              <textarea
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                placeholder={"Achievements & Certifications\n\nExample:\nAWS Certified\n1st in Hackathon\nPublished paper in IEEE"}
-                rows={5}
-                value={form.achievements}
-                onChange={(e) => updateForm("achievements", e.target.value)}
-              />
-            </div>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <Card>
+                <CardContent className="p-6 space-y-5">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2.5">
+                      <Trophy className="h-5 w-5 text-primary" />
+                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Skills & Achievements</span>
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-1">Technical skills and notable accomplishments</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Skills</label>
+                    <Textarea
+                      placeholder="Python, Java, React, Node.js, AWS, Docker, Git..."
+                      rows={4}
+                      value={form.skills}
+                      onChange={(e) => updateForm("skills", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Achievements & Certifications</label>
+                    <Textarea
+                      placeholder={"AWS Certified\n1st in Hackathon\nPublished paper in IEEE"}
+                      rows={5}
+                      value={form.achievements}
+                      onChange={(e) => updateForm("achievements", e.target.value)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
-          {/* Selected Template Info + Generate */}
-          <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${currentTemplate.color} flex items-center justify-center text-lg shrink-0`}>
-              {currentTemplate.preview}
+          {/* Generate Bar */}
+          <div className="sticky bottom-4 z-20">
+            <div className="p-3 rounded-2xl border border-glass-border bg-sticky-bg backdrop-blur-xl shadow-[0_-8px_30px_var(--shadow-heavy)]">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                  <div className={`h-9 w-9 rounded-lg bg-linear-to-br ${currentTemplate.color} flex items-center justify-center text-base shrink-0`}>
+                    {currentTemplate.preview}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold truncate">{currentTemplate.name}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">{currentTemplate.description}</div>
+                  </div>
+                </div>
+                {photoPreview && currentTemplate.hasPhoto && (
+                  <img src={photoPreview} alt="" className="h-8 w-8 rounded-full object-cover ring-1 ring-primary/30 shrink-0" />
+                )}
+                <Button
+                  onClick={generateResume}
+                  disabled={loading}
+                  variant="glow"
+                  className="gap-2 px-6 py-5 text-sm bg-linear-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 shrink-0"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4" /> Generate
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold">{currentTemplate.name}</div>
-              <div className="text-xs text-muted truncate">{currentTemplate.description}</div>
-            </div>
-            {photoPreview && currentTemplate.hasPhoto && (
-              <img src={photoPreview} alt="" className="w-8 h-8 rounded-full object-cover border border-primary" />
-            )}
           </div>
-
-          <button
-            onClick={generateResume}
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white py-3.5 rounded-xl font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" /> Generating Resume...
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-5 h-5" /> Generate {currentTemplate.name} Resume
-              </>
-            )}
-          </button>
         </div>
 
-        {/* Right: Output */}
-        <div className="space-y-4">
-          <div className="bg-card border border-border rounded-2xl p-5 h-full flex flex-col min-h-[500px]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">LaTeX Output</h3>
-              {latexCode && (
+      </div>
+
+      {/* Output Section — Full Width Below Form */}
+      {latexCode ? (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-8">
+          <Card className="relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-primary/40 to-transparent" />
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold">LaTeX Output</h3>
+                    <p className="text-[11px] text-muted-foreground">Your generated resume code</p>
+                  </div>
+                </div>
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={copyLatex}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-lg text-xs hover:border-primary/50 transition-colors"
+                    className="gap-1.5 text-xs"
                   >
-                    {copied ? <CheckCircle className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? <CheckCircle className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                     {copied ? "Copied!" : "Copy"}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    size="sm"
                     onClick={downloadPDF}
                     disabled={downloading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-xs hover:bg-primary-hover transition-colors disabled:opacity-50"
+                    className="gap-1.5 text-xs"
                   >
-                    {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                    {downloading ? "Converting..." : "Download PDF"}
-                  </button>
-                </div>
-              )}
-            </div>
-            {latexCode ? (
-              <pre className="latex-code flex-1">{latexCode}</pre>
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-muted text-sm">
-                <div className="text-center">
-                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p>Your generated LaTeX resume will appear here</p>
-                  <p className="text-xs mt-1 opacity-60">
-                    1. Choose a template → 2. Fill details → 3. Upload photo → 4. Generate
-                  </p>
+                    {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    {downloading ? "Converting..." : "PDF"}
+                  </Button>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+              <pre className="latex-code max-h-[500px] bg-code-bg border border-glass-border rounded-lg p-4 overflow-auto text-sm">{latexCode}</pre>
+            </CardContent>
+          </Card>
+        </motion.div>
+      ) : null}
+    </motion.div>
   );
 }

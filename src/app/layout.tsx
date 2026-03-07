@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/layout/Navbar";
+import { ThemeProvider } from "@/components/shared/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CareerForge AI - Smart Resume Builder",
-  description: "AI-powered resume builder, ATS checker, CV generator, and interview prep powered by Gemini 2.0 Flash",
+  description: "AI-powered resume builder, ATS checker, CV generator, and interview preparation tool",
 };
 
 export default function RootLayout({
@@ -24,16 +25,31 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 ml-64 p-6 overflow-y-auto">
-            {children}
-          </main>
-        </div>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div className="relative flex min-h-screen flex-col">
+            {/* Dot grid background */}
+            <div className="dot-grid-bg fixed inset-0 pointer-events-none z-0" />
+            {/* Radial glow spotlight at top */}
+            <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] pointer-events-none z-0 opacity-60"
+              style={{
+                background: "radial-gradient(ellipse at center top, rgba(139,92,246,0.08), transparent 70%)",
+              }}
+            />
+            <Navbar />
+            <main className="relative z-10 flex-1">
+              {children}
+            </main>
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );
