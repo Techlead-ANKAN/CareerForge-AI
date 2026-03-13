@@ -388,6 +388,14 @@ Generate the complete LaTeX code now:`;
     setDownloading(true);
     setError("");
 
+    const isCompilerUnavailable = (message: string) => {
+      const lower = message.toLowerCase();
+      return (
+        lower.includes("pdflatex") &&
+        (lower.includes("not installed") || lower.includes("not in path") || lower.includes("compiler not found"))
+      );
+    };
+
     const attemptCompile = async (code: string): Promise<Blob> => {
       const body: Record<string, string> = { latex: code };
       if (photoBase64) body.photo = photoBase64;
@@ -413,6 +421,11 @@ Generate the complete LaTeX code now:`;
       } catch (firstErr: unknown) {
         // Auto-fix attempt 1: ask Gemini to fix the LaTeX errors
         const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+
+        if (isCompilerUnavailable(errMsg)) {
+          throw new Error(errMsg);
+        }
+
         setError("Compilation failed — auto-fixing LaTeX code (attempt 1)...");
 
         let fixedCode = "";

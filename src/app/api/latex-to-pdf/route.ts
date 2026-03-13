@@ -1,9 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync } from "fs";
-import { execSync } from "child_process";
+import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } from "fs";
+import { spawnSync } from "child_process";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { tmpdir } from "os";
+
+function cleanupDir(workDir: string) {
+  try {
+    rmSync(workDir, { recursive: true, force: true });
+  } catch {
+    // Ignore cleanup errors.
+  }
+}
+
+function resolvePdfLatexBinary(): string | null {
+  const envPath = process.env.PDFLATEX_PATH;
+  if (envPath && existsSync(envPath)) {
+    return envPath;
+  }
+
+  const whereProbe = spawnSync("where", ["pdflatex"], {
+    encoding: "utf-8",
+    timeout: 10000,
+  });
+
+  if (!whereProbe.error && whereProbe.status === 0) {
+    const first = whereProbe.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean);
+    if (first) return first;
+  }
+
+  const candidates = [
+    join(process.env.LOCALAPPDATA || "", "Programs", "MiKTeX", "miktex", "bin", "x64", "pdflatex.exe"),
+    join(process.env.ProgramFiles || "", "MiKTeX", "miktex", "bin", "x64", "pdflatex.exe"),
+    join(process.env.USERPROFILE || "", "AppData", "Local", "Programs", "MiKTeX", "miktex", "bin", "x64", "pdflatex.exe"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+function runPdfLatex(pdflatexBin: string, workDir: string, haltOnError = true) {
+  const args = ["-interaction=nonstopmode"];
+  if (haltOnError) args.push("-halt-on-error");
+  args.push("resume.tex");
+
+  return spawnSync(pdflatexBin, args, {
+    cwd: workDir,
+    encoding: "utf-8",
+    timeout: 180000,
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,6 +63,17 @@ export async function POST(req: NextRequest) {
 
     if (!latex) {
       return NextResponse.json({ error: "No LaTeX code provided" }, { status: 400 });
+    }
+
+    const pdflatexBin = resolvePdfLatexBinary();
+    if (!pdflatexBin) {
+      return NextResponse.json(
+        {
+          error:
+            "LaTeX compiler not found: 'pdflatex' is not available to the server process. Install MiKTeX/TeX Live and restart VS Code + Next.js dev server, or set PDFLATEX_PATH.",
+        },
+        { status: 500 }
+      );
     }
 
     const id = randomUUID();
@@ -36,24 +99,27 @@ export async function POST(req: NextRequest) {
     writeFileSync(texFile, latex);
 
     try {
-      execSync(`cd "${workDir}" && pdflatex -interaction=nonstopmode -halt-on-error resume.tex`, {
-        timeout: 60000,
-        stdio: "pipe",
-      });
+      const firstPass = runPdfLatex(pdflatexBin, workDir, true);
+      if (firstPass.error || firstPass.status !== 0) {
+        throw new Error(firstPass.stderr || firstPass.stdout || firstPass.error?.message || "pdflatex failed");
+      }
 
       // Run twice for references
       if (existsSync(pdfFile)) {
-        execSync(`cd "${workDir}" && pdflatex -interaction=nonstopmode resume.tex`, {
-          timeout: 60000,
-          stdio: "pipe",
-        });
+        runPdfLatex(pdflatexBin, workDir, false);
       }
-    } catch {
+    } catch (compileError: unknown) {
       // Check if PDF was still generated despite errors
       if (!existsSync(pdfFile)) {
         const logFile = join(workDir, "resume.log");
         let logContent = "";
         let errorSummary = "LaTeX compilation failed.";
+
+        const compileMessage = compileError instanceof Error ? compileError.message : String(compileError);
+        if (compileMessage) {
+          errorSummary = `LaTeX compilation failed:\n${compileMessage.slice(0, 500)}`;
+        }
+
         if (existsSync(logFile)) {
           const fullLog = readFileSync(logFile, "utf-8");
           logContent = fullLog.slice(-2000);
@@ -67,10 +133,8 @@ export async function POST(req: NextRequest) {
             errorSummary = `LaTeX compilation failed:\n${errorLines}`;
           }
         }
-        // Cleanup
-        try {
-          execSync(`rm -rf "${workDir}"`);
-        } catch { /* ignore */ }
+
+        cleanupDir(workDir);
         return NextResponse.json(
           { error: errorSummary, log: logContent },
           { status: 400 }
@@ -79,18 +143,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (!existsSync(pdfFile)) {
-      try {
-        execSync(`rm -rf "${workDir}"`);
-      } catch { /* ignore */ }
+      cleanupDir(workDir);
       return NextResponse.json({ error: "PDF not generated" }, { status: 500 });
     }
 
     const pdfBuffer = readFileSync(pdfFile);
 
-    // Cleanup
-    try {
-      execSync(`rm -rf "${workDir}"`);
-    } catch { /* ignore */ }
+    cleanupDir(workDir);
 
     return new NextResponse(pdfBuffer, {
       headers: {

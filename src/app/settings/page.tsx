@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Settings, Key, CheckCircle, AlertCircle, ExternalLink, Cpu, RefreshCw } from "lucide-react";
-import { getModelOptions } from "@/lib/ai/gemini";
+import { clearCachedModels, fetchAvailableModels, getModelOptions, setApiKey as storeApiKey } from "@/lib/ai/gemini";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,33 +14,67 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [hasKey, setHasKey] = useState(false);
   const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash");
+  const [modelOptions, setModelOptions] = useState<string[]>(getModelOptions());
+  const [modelsLoading, setModelsLoading] = useState(false);
   const [modelSaved, setModelSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("gemini_api_key");
+    const stored = localStorage.getItem("gemini_api_key")?.trim();
     if (stored) {
       setApiKey(stored);
       setHasKey(true);
+      void loadAvailableModels(stored);
     }
-    const storedModel = localStorage.getItem("gemini_model");
+    const storedModel = localStorage.getItem("gemini_model")?.trim();
     if (storedModel) setSelectedModel(storedModel);
   }, []);
 
+  const loadAvailableModels = async (keyToUse: string) => {
+    const key = keyToUse.trim();
+    if (!key) return;
+
+    setModelsLoading(true);
+    try {
+      const models = await fetchAvailableModels(key);
+      const filtered = models.filter((model) => {
+        const lower = model.toLowerCase();
+        return !lower.includes("preview") && !lower.includes("experimental") && !lower.includes("exp-");
+      });
+      const finalModels = filtered.length > 0 ? filtered : models;
+      setModelOptions(finalModels);
+
+      setSelectedModel((prev) => {
+        if (finalModels.includes(prev)) return prev;
+        const next = finalModels[0] || "gemini-2.0-flash";
+        localStorage.setItem("gemini_model", next);
+        return next;
+      });
+    } finally {
+      setModelsLoading(false);
+    }
+  };
+
   const handleSave = () => {
-    if (apiKey.trim()) {
-      localStorage.setItem("gemini_api_key", apiKey.trim());
+    const trimmed = apiKey.trim();
+    if (trimmed) {
+      storeApiKey(trimmed);
       setHasKey(true);
       setSaved(true);
+      void loadAvailableModels(trimmed);
       setTimeout(() => setSaved(false), 3000);
     }
   };
 
   const handleClear = () => {
     localStorage.removeItem("gemini_api_key");
+    localStorage.removeItem("gemini_model");
+    clearCachedModels();
     setApiKey("");
     setHasKey(false);
+    setModelOptions(getModelOptions());
+    setSelectedModel("gemini-2.0-flash");
     setTestResult(null);
   };
 
@@ -64,18 +98,45 @@ export default function SettingsPage() {
     try {
       const { GoogleGenerativeAI } = await import("@google/generative-ai");
       const genAI = new GoogleGenerativeAI(apiKey.trim());
-      const model = genAI.getGenerativeModel({ model: selectedModel });
-      const result = await model.generateContent("Respond with just the word: OK");
-      const text = result.response.text();
-      if (text) {
-        setTestResult({ ok: true, message: `✅ Connected! Model "${selectedModel}" responded.` });
+
+      const available = modelOptions.length > 0 ? modelOptions : getModelOptions();
+      const tryModels = [selectedModel, ...available.filter((m) => m !== selectedModel)].slice(0, 2);
+
+      let lastError: unknown = null;
+      for (const modelName of tryModels) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: { maxOutputTokens: 1, temperature: 0 },
+          });
+          const result = await model.generateContent("OK");
+          const text = result.response.text();
+          if (text) {
+            setSelectedModel(modelName);
+            localStorage.setItem("gemini_model", modelName);
+            setTestResult({ ok: true, message: `✅ Connected! Model "${modelName}" responded.` });
+            return;
+          }
+        } catch (modelErr: unknown) {
+          lastError = modelErr;
+          const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
+          if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
+            continue;
+          }
+          throw modelErr;
+        }
+      }
+
+      const msg = lastError instanceof Error ? lastError.message : String(lastError);
+      if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
+        setTestResult({ ok: false, message: "⚠️ Quota/rate limit hit for available models. Wait for reset or enable billing." });
       } else {
         setTestResult({ ok: false, message: "Model returned empty response." });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
-        setTestResult({ ok: false, message: `⚠️ Quota exceeded for "${selectedModel}". Try a different model.` });
+        setTestResult({ ok: false, message: "⚠️ Quota/rate limit hit for available models. Wait for reset or enable billing." });
       } else if (msg.includes("401") || msg.includes("403")) {
         setTestResult({ ok: false, message: "🔑 Invalid API key. Please check and try again." });
       } else if (msg.includes("404")) {
@@ -127,16 +188,23 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-1.5 mb-4">
-              <label className="text-xs font-medium text-muted-foreground">API Key</label>
-              <Input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your Gemini API key..."
-              />
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSave();
+                }}
+              >
+                <label className="text-xs font-medium text-muted-foreground">API Key</label>
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter your Gemini API key..."
+                />
+              </form>
             </div>
             <div className="flex gap-3">
-              <Button onClick={handleSave} className="gap-1.5">
+              <Button onClick={handleSave} className="gap-1.5" type="button">
                 {saved ? (
                   <><CheckCircle className="h-3.5 w-3.5" /> Saved!</>
                 ) : (
@@ -144,7 +212,7 @@ export default function SettingsPage() {
                 )}
               </Button>
               {hasKey && (
-                <Button variant="destructive" onClick={handleClear} size="sm">
+                <Button variant="destructive" onClick={handleClear} size="sm" type="button">
                   Clear Key
                 </Button>
               )}
@@ -165,10 +233,10 @@ export default function SettingsPage() {
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground mb-4">
-              If you hit quota limits on one model, switch to another.
+              {modelsLoading ? "Detecting models available for this API key..." : "Choose a model supported by your current API key/project."}
             </p>
             <div className="grid grid-cols-2 gap-2 mb-4">
-              {getModelOptions().map((model) => (
+              {modelOptions.map((model) => (
                 <button
                   key={model}
                   onClick={() => handleModelChange(model)}
@@ -181,9 +249,9 @@ export default function SettingsPage() {
                   <div className="text-xs font-semibold">{model}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">
                     {model === "gemini-2.0-flash" && "Newest & fastest"}
-                    {model === "gemini-1.5-flash" && "High free-tier quota"}
-                    {model === "gemini-1.5-flash-latest" && "Latest 1.5 flash"}
-                    {model === "gemini-1.5-pro" && "Most capable (lower quota)"}
+                    {model.includes("flash") && model !== "gemini-2.0-flash" && "Fast and cost-efficient"}
+                    {model.includes("pro") && "Most capable model"}
+                    {!model.includes("flash") && !model.includes("pro") && "Supported model"}
                   </div>
                 </button>
               ))}
@@ -226,11 +294,11 @@ export default function SettingsPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
-                If you hit quota on <strong className="text-foreground">gemini-2.0-flash</strong>, switch to <strong className="text-foreground">gemini-1.5-flash</strong>
+                If one model gets rate-limited, switch to another model shown in your available list
               </li>
               <li className="flex items-start gap-2">
                 <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
-                The app automatically retries with backoff and falls back to other models
+                The app uses conservative retries to avoid burning quota too quickly
               </li>
               <li className="flex items-start gap-2">
                 <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />

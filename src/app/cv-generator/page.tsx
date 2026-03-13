@@ -194,6 +194,14 @@ Output the email text only (no LaTeX needed for emails).`;
     setDownloadingPdf(true);
     setError("");
 
+    const isCompilerUnavailable = (message: string) => {
+      const lower = message.toLowerCase();
+      return (
+        lower.includes("pdflatex") &&
+        (lower.includes("not installed") || lower.includes("not in path") || lower.includes("compiler not found"))
+      );
+    };
+
     const attemptCompile = async (code: string): Promise<Blob> => {
       const response = await fetch("/api/latex-to-pdf", {
         method: "POST",
@@ -213,6 +221,11 @@ Output the email text only (no LaTeX needed for emails).`;
         blob = await attemptCompile(latexCode);
       } catch (firstErr: unknown) {
         const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+
+        if (isCompilerUnavailable(errMsg)) {
+          throw new Error(errMsg);
+        }
+
         setError("Compilation failed — auto-fixing LaTeX code (attempt 1)...");
 
         try {
