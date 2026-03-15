@@ -364,8 +364,16 @@ export default function ResumeBuilderPage() {
     return result;
   };
 
-  const escapeLatex = (input: string): string => {
+  const stripInvisibleUnicode = (input: string): string => {
     return input
+      .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+      .replace(/\u00A0/g, " ")
+      .replace(/[\u2028\u2029]/g, "\n");
+  };
+
+  const escapeLatex = (input: string): string => {
+    const normalized = stripInvisibleUnicode(input.normalize("NFKC"));
+    return normalized
       .replace(/\\/g, "\\textbackslash{}")
       .replace(/&/g, "\\&")
       .replace(/%/g, "\\%")
@@ -376,6 +384,10 @@ export default function ResumeBuilderPage() {
       .replace(/}/g, "\\}")
       .replace(/~/g, "\\textasciitilde{}")
       .replace(/\^/g, "\\textasciicircum{}");
+  };
+
+  const normalizeLatexForCompile = (code: string): string => {
+    return stripInvisibleUnicode(code).replace(/\r\n/g, "\n");
   };
 
   const toItemize = (text: string): string => {
@@ -522,14 +534,14 @@ ${educationEntries
       .map((line) => {
         if (line.includes(":")) {
           const [k, ...rest] = line.split(":");
-          return `${escapeLatex(k.trim())} & ${escapeLatex(rest.join(":").trim())}\\\\`;
+          return `\\textbf{${escapeLatex(k.trim())}} & ${escapeLatex(rest.join(":").trim())}\\\\`;
         }
-        return `Technical Skills & ${escapeLatex(line)}\\\\`;
+        return `\\textbf{Technical Skills} & ${escapeLatex(line)}\\\\`;
       })
       .join("\n");
     const skillsSection = skillRows
       ? `\\begin{rSection}{SKILLS}
-\\begin{tabular}{ @{} >{\\bfseries}l @{} l }
+\\begin{tabular}{@{}ll}
 ${skillRows}
 \\end{tabular}\\
 \\end{rSection}`
@@ -597,6 +609,138 @@ ${achievementsSection}
 \\end{document}`;
   };
 
+  type TechMeta = {
+    technical: string[];
+    subjectsOfInterest: string[];
+    additionalSkills: string[];
+    additionalDetails: string[];
+    declaration: string;
+  };
+
+  const splitInlineValues = (text: string): string[] => {
+    return text
+      .split(/[;,|]/g)
+      .map((v) => v.trim())
+      .filter(Boolean);
+  };
+
+  const parseTechMeta = (): TechMeta => {
+    const parsed: TechMeta = {
+      technical: [],
+      subjectsOfInterest: [],
+      additionalSkills: [],
+      additionalDetails: [],
+      declaration: "",
+    };
+
+    const processLine = (line: string, source: "skills" | "achievements") => {
+      const cleaned = stripInvisibleUnicode(line).trim();
+      if (!cleaned) return;
+
+      const subjectMatch = cleaned.match(/^subjects?\s+of\s+interest\s*:\s*(.+)$/i);
+      if (subjectMatch) {
+        parsed.subjectsOfInterest.push(...splitInlineValues(subjectMatch[1]));
+        return;
+      }
+
+      const addSkillMatch = cleaned.match(/^additional\s+skills?\s*:\s*(.+)$/i);
+      if (addSkillMatch) {
+        parsed.additionalSkills.push(...splitInlineValues(addSkillMatch[1]));
+        return;
+      }
+
+      const addDetailsMatch = cleaned.match(/^additional\s+details?\s*:\s*(.+)$/i);
+      if (addDetailsMatch) {
+        parsed.additionalDetails.push(addDetailsMatch[1].trim());
+        return;
+      }
+
+      const declarationMatch = cleaned.match(/^declaration\s*:\s*(.+)$/i);
+      if (declarationMatch) {
+        parsed.declaration = declarationMatch[1].trim();
+        return;
+      }
+
+      if (source === "skills") {
+        parsed.technical.push(cleaned);
+      } else {
+        parsed.additionalSkills.push(cleaned);
+      }
+    };
+
+    splitLines(form.skills).forEach((line) => processLine(line, "skills"));
+    splitLines(form.achievements).forEach((line) => processLine(line, "achievements"));
+
+    return parsed;
+  };
+
+  const buildTechDeveloperLatex = (): string => {
+    const meta = parseTechMeta();
+
+    const section = (title: string, body: string) => {
+      if (!body.trim()) return "";
+      return `\\section*{${title}}\n${body}\n`;
+    };
+
+    const bullet = (lines: string[]) => {
+      if (lines.length === 0) return "";
+      return [
+        "\\begin{itemize}[leftmargin=*,nosep]",
+        ...lines.map((line) => `\\item ${escapeLatex(line)}`),
+        "\\end{itemize}",
+      ].join("\n");
+    };
+
+    const objectiveText = form.summary.trim() || `${form.targetRole || "Professional"} candidate seeking suitable opportunities.`;
+    const educationBody = form.education.trim() ? bullet(splitLines(form.education)) : "";
+    const technicalBody = meta.technical.length
+      ? meta.technical
+          .map((line) => {
+            if (line.includes(":")) {
+              const [k, ...rest] = line.split(":");
+              return `\\textbf{${escapeLatex(k.trim())}}: ${escapeLatex(rest.join(":").trim())}\\\\`;
+            }
+            return `\\textbf{Technical Skills}: ${escapeLatex(line)}\\\\`;
+          })
+          .join("\n")
+      : "";
+
+    const contacts = [form.email.trim(), form.phone.trim(), form.location.trim(), form.linkedin.trim(), form.github.trim()]
+      .filter(Boolean)
+      .map((v) => escapeLatex(v))
+      .join(" | ");
+
+    return `\\documentclass[a4paper,11pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage[margin=0.55in]{geometry}
+\\usepackage{enumitem,hyperref}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{4pt}
+\\begin{document}
+
+\\begin{center}
+{\\LARGE\\textbf{${escapeLatex(form.fullName || "Candidate")}}}\\
+{\\normalsize ${escapeLatex(form.targetRole || "Professional")}}\\
+${contacts ? `${contacts}\\\n` : ""}
+\\end{center}
+\\hrule\\vspace{6pt}
+
+${section("CAREER OBJECTIVE", `${escapeLatex(objectiveText)}\n`)}
+${section("EDUCATION", educationBody)}
+${section("TECHNICAL SKILLS", technicalBody)}
+${section("SUBJECTS OF INTEREST", bullet(meta.subjectsOfInterest))}
+${section("EXPERIENCE", bullet(splitLines(form.experience)))}
+${section("PROJECTS", bullet(splitLines(form.projects)))}
+${section("ADDITIONAL SKILLS", bullet(meta.additionalSkills))}
+${section("ADDITIONAL DETAILS", bullet(meta.additionalDetails))}
+${section("DECLARATION", meta.declaration ? `${escapeLatex(meta.declaration)}\n` : "")}
+
+\\end{document}`;
+  };
+
   const getThemeViolations = (code: string, templateId: string, expectsPhoto: boolean): string[] => {
     const violations: string[] = [];
     const lower = code.toLowerCase();
@@ -651,6 +795,18 @@ ${achievementsSection}
         setLatexCode(text);
       } catch {
         setError("Could not build FAANGPath template from provided data.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (selectedTemplate === "tech-developer") {
+      try {
+        const text = buildTechDeveloperLatex();
+        setLatexCode(text);
+      } catch {
+        setError("Could not build Tech Developer template from provided data.");
       } finally {
         setLoading(false);
       }
@@ -803,6 +959,27 @@ ${text}`;
     setDownloading(true);
     setError("");
 
+    const attemptHtmlTemplatePdf = async (): Promise<Blob> => {
+      const response = await fetch("/api/resume-html-to-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateId: selectedTemplate,
+          form,
+          educations,
+          photoBase64,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const message = typeof data?.error === "string" ? data.error : "HTML template PDF generation failed";
+        throw new Error(message);
+      }
+
+      return response.blob();
+    };
+
     const stripPhotoReferencesIfMissing = (code: string): string => {
       if (photoBase64) return code;
 
@@ -825,8 +1002,14 @@ ${text}`;
       );
     };
 
+    const isQuotaError = (message: string) => {
+      const lower = message.toLowerCase();
+      return lower.includes("quota") || lower.includes("429") || lower.includes("resource_exhausted") || lower.includes("too many requests");
+    };
+
     const attemptCompile = async (code: string): Promise<Blob> => {
-      const body: Record<string, string> = { latex: code };
+      const safeCode = normalizeLatexForCompile(code);
+      const body: Record<string, string> = { latex: safeCode };
       if (photoBase64) body.photo = photoBase64;
 
       const response = await fetch("/api/latex-to-pdf", {
@@ -849,8 +1032,23 @@ ${text}`;
     };
 
     try {
+      try {
+        const htmlBlob = await attemptHtmlTemplatePdf();
+        const htmlUrl = URL.createObjectURL(htmlBlob);
+        const htmlLink = document.createElement("a");
+        htmlLink.href = htmlUrl;
+        htmlLink.download = `${form.fullName.replace(/\s+/g, "_") || "resume"}.pdf`;
+        htmlLink.click();
+        URL.revokeObjectURL(htmlUrl);
+        return;
+      } catch (htmlErr: unknown) {
+        const htmlMessage = htmlErr instanceof Error ? htmlErr.message : String(htmlErr);
+        setError(`HTML template PDF generation failed:\n${htmlMessage.slice(0, 320)}`);
+        return;
+      }
+
       let blob: Blob;
-      let compileBaseCode = stripPhotoReferencesIfMissing(latexCode);
+      let compileBaseCode = normalizeLatexForCompile(stripPhotoReferencesIfMissing(latexCode));
       if (compileBaseCode !== latexCode) {
         setLatexCode(compileBaseCode);
       }
@@ -896,6 +1094,26 @@ ${compileBaseCode}`;
         } catch (fixErr: unknown) {
           // Auto-fix attempt 2: aggressive simplification
           const fixMsg2 = fixErr instanceof Error ? fixErr.message : String(fixErr);
+
+          if (isQuotaError(fixMsg2)) {
+            setError("Auto-fix skipped due API quota. Building a compile-safe PDF layout from your data...");
+            const fallbackLatex = normalizeLatexForCompile(buildSafeLatexFallback());
+            setLatexCode(fallbackLatex);
+            try {
+              blob = await attemptCompile(fallbackLatex);
+            } catch (fallbackErr: unknown) {
+              const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+              throw new Error(`Auto-fix failed due API quota: ${fixMsg2}\n\nFallback compile also failed: ${fallbackMsg}`);
+            }
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${form.fullName.replace(/\s+/g, "_") || "resume"}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+            return;
+          }
+
           setError("Auto-fix attempt 1 failed — trying aggressive simplification (attempt 2)...");
 
           try {
@@ -927,7 +1145,7 @@ ${fixedCode}`;
             const fixMsg = fixErr2 instanceof Error ? fixErr2.message : "PDF conversion failed after auto-fix";
             setError("Auto-fix failed. Building a compile-safe PDF layout from your data...");
 
-            const fallbackLatex = buildSafeLatexFallback();
+            const fallbackLatex = normalizeLatexForCompile(buildSafeLatexFallback());
             setLatexCode(fallbackLatex);
 
             try {

@@ -30,6 +30,7 @@ const RESUME_CLS_CONTENT = String.raw`\NeedsTeXFormat{LaTeX2e}
 \def\@addresstwo{}
 
 \newcommand{\name}[1]{\gdef\@name{#1}}
+\providecommand{\address}[1]{}
 \renewcommand{\address}[1]{%
   \ifthenelse{\equal{\@addressone}{}}{\gdef\@addressone{#1}}{\gdef\@addresstwo{#1}}%
 }
@@ -108,6 +109,14 @@ function runPdfLatex(pdflatexBin: string, workDir: string, haltOnError = true) {
   });
 }
 
+function sanitizeLatexInput(input: string): string {
+  return input
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u2028\u2029]/g, "\n")
+    .replace(/\r\n/g, "\n");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { latex, photo } = await req.json();
@@ -151,7 +160,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    writeFileSync(texFile, latex);
+    const safeLatex = sanitizeLatexInput(String(latex));
+    writeFileSync(texFile, safeLatex);
 
     try {
       const firstPass = runPdfLatex(pdflatexBin, workDir, true);
