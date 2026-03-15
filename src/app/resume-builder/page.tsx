@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -21,6 +21,7 @@ import {
   Plus,
   Trash2,
   Upload,
+  Save,
 } from "lucide-react";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 import { RESUME_TEMPLATES, getTemplateById } from "@/lib/data/templates";
@@ -104,6 +105,17 @@ interface ResumeForm {
   achievements: string;
 }
 
+interface ResumeDraft {
+  form: ResumeForm;
+  selectedTemplate: string;
+  activeSection: string;
+  photoBase64: string | null;
+  educations: EducationEntry[];
+  savedAt: number;
+}
+
+const RESUME_DRAFT_STORAGE_KEY = "resume_builder_draft_v1";
+
 const defaultForm: ResumeForm = {
   fullName: "",
   email: "",
@@ -129,14 +141,62 @@ export default function ResumeBuilderPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [activeSection, setActiveSection] = useState("template");
-  const [selectedTemplate, setSelectedTemplate] = useState("modern-professional");
+  const [selectedTemplate, setSelectedTemplate] = useState("faangpath-simple");
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [educations, setEducations] = useState<EducationEntry[]>([emptyEducation()]);
   const [jdFileName, setJdFileName] = useState<string | null>(null);
   const [jdLoading, setJdLoading] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jdFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RESUME_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+
+      const draft = JSON.parse(raw) as Partial<ResumeDraft>;
+
+      let nextForm: ResumeForm = {
+        ...defaultForm,
+        ...(draft.form || {}),
+      };
+
+      let nextEducations: EducationEntry[] = [emptyEducation()];
+      if (Array.isArray(draft.educations) && draft.educations.length > 0) {
+        nextEducations = draft.educations.map((edu) => ({
+          ...emptyEducation(),
+          ...edu,
+          id: edu.id || crypto.randomUUID(),
+        }));
+        nextForm = {
+          ...nextForm,
+          education: formatEducationsToString(nextEducations),
+        };
+      }
+
+      setForm(nextForm);
+      setEducations(nextEducations);
+
+      if (typeof draft.selectedTemplate === "string" && draft.selectedTemplate) {
+        setSelectedTemplate(draft.selectedTemplate);
+      }
+      if (typeof draft.activeSection === "string" && draft.activeSection) {
+        setActiveSection(draft.activeSection);
+      }
+      if (typeof draft.photoBase64 === "string" && draft.photoBase64) {
+        setPhotoBase64(draft.photoBase64);
+        setPhotoPreview(draft.photoBase64);
+      }
+
+      setSaveNotice("Progress restored from saved draft.");
+      const timer = setTimeout(() => setSaveNotice(""), 2500);
+      return () => clearTimeout(timer);
+    } catch {
+      // Ignore malformed local draft.
+    }
+  }, []);
 
   const updateEducation = (id: string, field: keyof EducationEntry, value: string) => {
     setEducations((prev) => {
@@ -223,6 +283,29 @@ export default function ResumeBuilderPage() {
     if (jdFileInputRef.current) jdFileInputRef.current.value = "";
   };
 
+  const handleSaveProgress = () => {
+    try {
+      const draft: ResumeDraft = {
+        form: {
+          ...form,
+          education: formatEducationsToString(educations),
+        },
+        selectedTemplate,
+        activeSection,
+        photoBase64,
+        educations,
+        savedAt: Date.now(),
+      };
+
+      localStorage.setItem(RESUME_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      setSaveNotice("Progress saved locally. It will remain after refresh.");
+    } catch {
+      setSaveNotice("Could not save progress. Please try again.");
+    } finally {
+      setTimeout(() => setSaveNotice(""), 2500);
+    }
+  };
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -281,13 +364,279 @@ export default function ResumeBuilderPage() {
     return result;
   };
 
-  const generateResume = async () => {
-    const key = getApiKey();
-    if (!key) {
-      setError("Please configure your Gemini API key in Settings first.");
-      return;
+  const escapeLatex = (input: string): string => {
+    return input
+      .replace(/\\/g, "\\textbackslash{}")
+      .replace(/&/g, "\\&")
+      .replace(/%/g, "\\%")
+      .replace(/\$/g, "\\$")
+      .replace(/#/g, "\\#")
+      .replace(/_/g, "\\_")
+      .replace(/{/g, "\\{")
+      .replace(/}/g, "\\}")
+      .replace(/~/g, "\\textasciitilde{}")
+      .replace(/\^/g, "\\textasciicircum{}");
+  };
+
+  const toItemize = (text: string): string => {
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-•*]\s*/, ""));
+
+    if (lines.length === 0) return "";
+
+    return [
+      "\\begin{itemize}[leftmargin=*,nosep]",
+      ...lines.map((line) => `\\item ${escapeLatex(line)}`),
+      "\\end{itemize}",
+    ].join("\n");
+  };
+
+  const buildSafeLatexFallback = (): string => {
+    const contactParts = [
+      form.email?.trim(),
+      form.phone?.trim(),
+      form.location?.trim(),
+      form.linkedin?.trim(),
+      form.github?.trim(),
+    ].filter(Boolean) as string[];
+
+    const section = (title: string, body: string) => {
+      if (!body.trim()) return "";
+      return `\\section*{${title}}\n${body}\n`;
+    };
+
+    const summaryBody = form.summary.trim() ? `${escapeLatex(form.summary.trim())}\n` : "";
+    const educationBody = form.education.trim() ? toItemize(form.education) : "";
+    const experienceBody = form.experience.trim() ? toItemize(form.experience) : "";
+    const projectsBody = form.projects.trim() ? toItemize(form.projects) : "";
+    const skillsBody = form.skills.trim() ? `${escapeLatex(form.skills.trim())}\n` : "";
+    const achievementsBody = form.achievements.trim() ? toItemize(form.achievements) : "";
+
+    return `\\documentclass[a4paper,11pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem,hyperref}
+\\setcounter{secnumdepth}{0}
+\\pagestyle{empty}
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{4pt}
+\\begin{document}
+
+{\\LARGE\\textbf{${escapeLatex(form.fullName.trim() || "Candidate")}}}\\
+{\\large ${escapeLatex(form.targetRole.trim() || "Professional")}}\\
+${contactParts.length > 0 ? `${contactParts.map((c) => escapeLatex(c)).join(" \\textbar{} ")}\\\n` : ""}
+\\vspace{4pt}\\hrule\\vspace{8pt}
+
+${section("Professional Summary", summaryBody)}
+${section("Education", educationBody)}
+${section("Experience", experienceBody)}
+${section("Projects", projectsBody)}
+${section("Skills", skillsBody)}
+${section("Achievements", achievementsBody)}
+
+\\end{document}`;
+  };
+
+  const formatDateRange = (startYear?: string, endYear?: string): string => {
+    const start = (startYear || "").trim();
+    const end = (endYear || "").trim();
+    if (start && end) return `${escapeLatex(start)} - ${escapeLatex(end)}`;
+    if (start) return escapeLatex(start);
+    if (end) return escapeLatex(end);
+    return "";
+  };
+
+  const buildFaangpathLatex = (): string => {
+    const fullName = escapeLatex(form.fullName.trim() || "Candidate");
+    const role = escapeLatex(form.targetRole.trim() || "Professional");
+
+    const phone = form.phone.trim();
+    const location = form.location.trim();
+    const email = form.email.trim();
+    const linkedin = form.linkedin.trim();
+    const github = form.github.trim();
+
+    const addressLine1Parts = [phone, location].filter(Boolean).map((v) => escapeLatex(v));
+    const addressLine1 = addressLine1Parts.length > 0 ? addressLine1Parts.join(" \\\\ ") : "";
+
+    const normalizeUrl = (url: string): string => {
+      if (!url) return "";
+      if (/^https?:\/\//i.test(url)) return url;
+      return `https://${url}`;
+    };
+
+    const contactLinks: string[] = [];
+    if (email) {
+      const safeEmail = escapeLatex(email);
+      contactLinks.push(`\\href{mailto:${email}}{${safeEmail}}`);
+    }
+    if (linkedin) {
+      const link = normalizeUrl(linkedin);
+      contactLinks.push(`\\href{${link}}{${escapeLatex(linkedin)}}`);
+    }
+    if (github) {
+      const link = normalizeUrl(github);
+      contactLinks.push(`\\href{${link}}{${escapeLatex(github)}}`);
+    }
+    const addressLine2 = contactLinks.join(" \\\\ ");
+
+    const objectiveText = form.summary.trim()
+      ? escapeLatex(form.summary.trim())
+      : `${role} focused candidate seeking relevant opportunities.`;
+
+    const educationEntries = educations.filter((e) => e.degree.trim() || e.institution.trim());
+    const educationSection = educationEntries.length > 0
+      ? `\\begin{rSection}{Education}
+${educationEntries
+  .map((e) => {
+    const degree = [e.degree.trim(), e.fieldOfStudy.trim()].filter(Boolean).join(" in ");
+    const institution = e.institution.trim();
+    const dateRange = formatDateRange(e.startYear, e.endYear);
+    const gradeText = e.gradeValue.trim()
+      ? e.gradeType === "Grade"
+        ? `Grade: ${escapeLatex(e.gradeValue.trim())}`
+        : `${escapeLatex(e.gradeType)}: ${escapeLatex(e.gradeValue.trim())}${e.gradeScale.trim() ? `/${escapeLatex(e.gradeScale.trim())}` : ""}`
+      : "";
+    const coursework = e.coursework.trim() ? `Relevant Coursework: ${escapeLatex(e.coursework.trim())}.` : "";
+
+    const firstLineLeft = [degree, institution].filter(Boolean).map((v) => escapeLatex(v)).join(", ");
+    const firstLine = dateRange
+      ? `{\\bf ${firstLineLeft}} \\hfill {${dateRange}}`
+      : `{\\bf ${firstLineLeft}}`;
+
+    return [firstLine, gradeText, coursework].filter(Boolean).join("\\n") + "\\n";
+  })
+  .join("\\n")}
+\\end{rSection}`
+      : "";
+
+    const skillLines = form.skills
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const skillRows = skillLines
+      .map((line) => {
+        if (line.includes(":")) {
+          const [k, ...rest] = line.split(":");
+          return `${escapeLatex(k.trim())} & ${escapeLatex(rest.join(":").trim())}\\\\`;
+        }
+        return `Technical Skills & ${escapeLatex(line)}\\\\`;
+      })
+      .join("\n");
+    const skillsSection = skillRows
+      ? `\\begin{rSection}{SKILLS}
+\\begin{tabular}{ @{} >{\\bfseries}l @{} l }
+${skillRows}
+\\end{tabular}\\
+\\end{rSection}`
+      : "";
+
+    const experienceBullets = form.experience
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-•*]\s*/, ""));
+    const experienceSection = experienceBullets.length > 0
+      ? `\\begin{rSection}{EXPERIENCE}
+\\textbf{${role}}\\
+\\begin{itemize}
+${experienceBullets.map((b) => `\\item ${escapeLatex(b)}`).join("\n")}
+\\end{itemize}
+\\end{rSection}`
+      : "";
+
+    const projectBullets = form.projects
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-•*]\s*/, ""));
+    const projectsSection = projectBullets.length > 0
+      ? `\\begin{rSection}{PROJECTS}
+\\vspace{-1.0em}
+${projectBullets.map((p) => `\\item \\textbf{Project.} {${escapeLatex(p)}}`).join("\n")}
+\\end{rSection}`
+      : "";
+
+    const achievementBullets = form.achievements
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-•*]\s*/, ""));
+    const achievementsSection = achievementBullets.length > 0
+      ? `\\begin{rSection}{Extra-Curricular Activities}
+\\begin{itemize}
+${achievementBullets.map((a) => `\\item ${escapeLatex(a)}`).join("\n")}
+\\end{itemize}
+\\end{rSection}`
+      : "";
+
+    return `\\documentclass{resume}
+\\usepackage[left=0.4in,top=0.4in,right=0.4in,bottom=0.4in]{geometry}
+\\newcommand{\\tab}[1]{\\hspace{.2667\\textwidth}\\rlap{#1}}
+\\newcommand{\\itab}[1]{\\hspace{0em}\\rlap{#1}}
+\\name{${fullName}}
+${addressLine1 ? `\\address{${addressLine1}}` : ""}
+${addressLine2 ? `\\address{${addressLine2}}` : ""}
+
+\\begin{document}
+
+\\begin{rSection}{OBJECTIVE}
+{${objectiveText}}
+\\end{rSection}
+
+${educationSection}
+${skillsSection}
+${experienceSection}
+${projectsSection}
+${achievementsSection}
+
+\\end{document}`;
+  };
+
+  const getThemeViolations = (code: string, templateId: string, expectsPhoto: boolean): string[] => {
+    const violations: string[] = [];
+    const lower = code.toLowerCase();
+
+    if (!code.includes("\\documentclass")) violations.push("Missing \\documentclass declaration");
+    if (!code.includes("\\setcounter{secnumdepth}{0}")) violations.push("Missing secnumdepth=0 (unnumbered sections)");
+    if (!code.includes("\\pagestyle{empty}")) violations.push("Missing \\pagestyle{empty}");
+    if (/\\section\{/.test(code)) violations.push("Uses numbered \\section{} instead of unnumbered headings");
+    if (/(lorem ipsum|your name|placeholder|sample text)/i.test(lower)) {
+      violations.push("Contains placeholder/filler text");
     }
 
+    if (!expectsPhoto && /photo\.jpg/i.test(code)) {
+      violations.push("References photo.jpg even though no photo is uploaded");
+    }
+
+    if (!code.includes("\\begin{itemize}")) {
+      violations.push("Missing bullet structure for content sections");
+    }
+
+    if (templateId === "modern-professional") {
+      const minipageCount = (code.match(/\\begin\{minipage\}/g) || []).length;
+      if (minipageCount < 2) violations.push("Modern Professional must use a two-column minipage layout");
+      if (!/\\definecolor\{primary\}/.test(code)) violations.push("Modern Professional missing primary color definition");
+    }
+
+    if (templateId === "classic-elegant" || templateId === "minimal-clean") {
+      if (/\\begin\{tikzpicture\}/.test(code)) {
+        violations.push("Classic/Minimal templates should not use tikz graphics");
+      }
+    }
+
+    if ((templateId === "tech-developer" || templateId === "creative-modern" || templateId === "executive-premium") && !/\\definecolor\{accent\}|\\definecolor\{gold\}/.test(code)) {
+      violations.push("Template accent color tokens are missing");
+    }
+
+    return violations;
+  };
+
+  const generateResume = async () => {
     if (!form.fullName || !form.targetRole) {
       setError("Please fill in at least your name and target role.");
       return;
@@ -295,6 +644,25 @@ export default function ResumeBuilderPage() {
 
     setLoading(true);
     setError("");
+
+    if (selectedTemplate === "faangpath-simple") {
+      try {
+        const text = buildFaangpathLatex();
+        setLatexCode(text);
+      } catch {
+        setError("Could not build FAANGPath template from provided data.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    const key = getApiKey();
+    if (!key) {
+      setError("Please configure your Gemini API key in Settings first.");
+      setLoading(false);
+      return;
+    }
 
     const template = getTemplateById(selectedTemplate);
     const hasPhoto = template.hasPhoto && photoBase64;
@@ -310,6 +678,8 @@ ${template.promptInstructions}
 - Do NOT wrap in markdown code blocks (\`\`\`)
 - Must compile with pdflatex WITHOUT errors on first try
 - Do NOT use any packages that require XeLaTeX or LuaLaTeX
+- Use ONLY user-provided content. Do NOT invent placeholders, fake companies, fake projects, fake achievements, or filler text.
+- If a section has no user input, OMIT that section completely.
 - The page background MUST be WHITE — do NOT use dark backgrounds, colored page fills, or dark themes
 - Sidebar/column accent colors are fine but the main page/paper color must stay white
 - Text color must be dark (black/dark gray) for readability on white paper
@@ -320,6 +690,15 @@ ${template.promptInstructions}
 - Keep to 1 page (max 2 if extensive experience provided)
 - ALL content must be properly aligned — no overlapping text
 - For two-column layouts use minipage or paracol — NOT multicols with tikz absolute positioning
+- If a contact field value is "Not provided", do not print that line in the resume.
+
+=== VISUAL QUALITY CONTRACT ===
+- Must look like a real modern resume template, not raw LaTeX notes.
+- Apply a clear hierarchy: Name > Section Titles > Role/Project Titles > Bullet text.
+- Ensure section spacing is consistent (tight but readable), avoid large random gaps.
+- Avoid excessive decorative elements; prioritize clean alignment and scannability.
+- Keep line lengths balanced; avoid overfull boxes and broken alignment.
+- Use a consistent header pattern and consistent section divider style for the selected template.
 
 === TIKZ SAFETY RULES (CRITICAL — prevents pgf/tikz compilation errors) ===
 - ALWAYS wrap \\clip operations inside a \\begin{scope}...\\end{scope}
@@ -367,13 +746,49 @@ ${form.projects ? `=== PROJECTS ===\n${form.projects}` : ""}
 ${form.skills ? `=== SKILLS ===\n${form.skills}` : ""}
 ${form.achievements ? `=== ACHIEVEMENTS ===\n${form.achievements}` : ""}
 
-If any section has no data provided, create compelling placeholder content appropriate for the "${form.targetRole}" role, or skip the section if not essential.
+Strict omission rule:
+- Include WORK EXPERIENCE section only when the WORK EXPERIENCE block is present above.
+- Include PROJECTS section only when the PROJECTS block is present above.
+- Include SKILLS section only when the SKILLS block is present above.
+- Include ACHIEVEMENTS section only when the ACHIEVEMENTS block is present above.
+- Do not add any additional sections that were not provided.
 
 Generate the complete LaTeX code now:`;
 
       let text = await generateWithRetry(prompt);
       text = text.replace(/^```(?:latex|tex)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
       text = sanitizeLatex(text);
+
+      const initialViolations = getThemeViolations(text, template.id, Boolean(hasPhoto));
+      if (initialViolations.length > 0) {
+        const refinePrompt = `You are fixing a LaTeX resume to strictly match a template design system.
+
+TEMPLATE: ${template.name}
+${template.promptInstructions}
+
+CURRENT VIOLATIONS (fix all):
+${initialViolations.map((v, i) => `${i + 1}. ${v}`).join("\n")}
+
+NON-NEGOTIABLE RULES:
+- Return ONLY corrected LaTeX code.
+- Keep all user-provided content unchanged in meaning.
+- Do NOT add placeholder/fake content.
+- Keep sections unnumbered and visually clean.
+- Ensure pdflatex compatibility.
+${hasPhoto ? "- Keep photo block only if photo.jpg is referenced correctly." : "- Remove all photo references and any includegraphics for photo.jpg."}
+
+LATEX TO FIX:
+${text}`;
+
+        try {
+          let refined = await generateWithRetry(refinePrompt);
+          refined = refined.replace(/^```(?:latex|tex)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+          text = sanitizeLatex(refined);
+        } catch {
+          // Keep initial generated output if refinement cannot complete.
+        }
+      }
+
       setLatexCode(text);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Generation failed";
@@ -387,6 +802,20 @@ Generate the complete LaTeX code now:`;
     if (!latexCode) return;
     setDownloading(true);
     setError("");
+
+    const stripPhotoReferencesIfMissing = (code: string): string => {
+      if (photoBase64) return code;
+
+      let sanitized = code;
+      // Remove entire photo tikz blocks if they contain photo.jpg
+      sanitized = sanitized.replace(
+        /\\begin\{tikzpicture\}[\s\S]*?photo\.jpg[\s\S]*?\\end\{tikzpicture\}/gi,
+        "% photo block removed (no photo uploaded)"
+      );
+      // Remove direct includegraphics usage of photo.jpg if still present
+      sanitized = sanitized.replace(/\\includegraphics(?:\[[^\]]*\])?\{photo\.jpg\}/gi, "");
+      return sanitized;
+    };
 
     const isCompilerUnavailable = (message: string) => {
       const lower = message.toLowerCase();
@@ -407,8 +836,13 @@ Generate the complete LaTeX code now:`;
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "PDF conversion failed");
+        const data = await response.json().catch(() => ({}));
+        const errorText = typeof data?.error === "string" ? data.error : "PDF conversion failed";
+        const logText = typeof data?.log === "string" ? data.log : "";
+        const combined = logText
+          ? `${errorText}\n\nCompiler log excerpt:\n${logText.slice(-1500)}`
+          : errorText;
+        throw new Error(combined);
       }
 
       return response.blob();
@@ -416,8 +850,13 @@ Generate the complete LaTeX code now:`;
 
     try {
       let blob: Blob;
+      let compileBaseCode = stripPhotoReferencesIfMissing(latexCode);
+      if (compileBaseCode !== latexCode) {
+        setLatexCode(compileBaseCode);
+      }
+
       try {
-        blob = await attemptCompile(latexCode);
+        blob = await attemptCompile(compileBaseCode);
       } catch (firstErr: unknown) {
         // Auto-fix attempt 1: ask Gemini to fix the LaTeX errors
         const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
@@ -444,7 +883,7 @@ COMPILATION ERRORS:
 ${errMsg}
 
 ORIGINAL LATEX CODE:
-${latexCode}`;
+${compileBaseCode}`;
 
           fixedCode = await generateWithRetry(fixPrompt);
           fixedCode = fixedCode.replace(/^\`\`\`(?:latex|tex)?\s*\n?/i, "").replace(/\n?\`\`\`\s*$/i, "").trim();
@@ -486,7 +925,17 @@ ${fixedCode}`;
             blob = await attemptCompile(fixedCode2);
           } catch (fixErr2: unknown) {
             const fixMsg = fixErr2 instanceof Error ? fixErr2.message : "PDF conversion failed after auto-fix";
-            throw new Error(`Auto-fix failed after 2 attempts: ${fixMsg}`);
+            setError("Auto-fix failed. Building a compile-safe PDF layout from your data...");
+
+            const fallbackLatex = buildSafeLatexFallback();
+            setLatexCode(fallbackLatex);
+
+            try {
+              blob = await attemptCompile(fallbackLatex);
+            } catch (fallbackErr: unknown) {
+              const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+              throw new Error(`Auto-fix failed after 2 attempts: ${fixMsg}\n\nFallback compile also failed: ${fallbackMsg}`);
+            }
           }
         }
       }
@@ -523,6 +972,9 @@ ${fixedCode}`;
   ];
 
   const currentTemplate = getTemplateById(selectedTemplate);
+  const hasName = form.fullName.trim().length > 0;
+  const hasTargetRole = form.targetRole.trim().length > 0;
+  const canGenerate = hasName && hasTargetRole;
 
   return (
     <motion.div
@@ -1149,6 +1601,11 @@ ${fixedCode}`;
 
           {/* Generate Bar */}
           <div className="sticky bottom-4 z-20">
+            {saveNotice && (
+              <div className="mb-2 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+                {saveNotice}
+              </div>
+            )}
             <div className="p-3 rounded-2xl border border-glass-border bg-sticky-bg backdrop-blur-xl shadow-[0_-8px_30px_var(--shadow-heavy)]">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -1163,11 +1620,29 @@ ${fixedCode}`;
                 {photoPreview && currentTemplate.hasPhoto && (
                   <img src={photoPreview} alt="" className="h-8 w-8 rounded-full object-cover ring-1 ring-primary/30 shrink-0" />
                 )}
+                {!canGenerate && (
+                  <div className="hidden md:block text-[11px] text-amber-400/90 shrink-0">
+                    Missing: {!hasName ? "Name" : ""}{!hasName && !hasTargetRole ? " + " : ""}{!hasTargetRole ? "Target Role" : ""}
+                  </div>
+                )}
+                <Button
+                  onClick={handleSaveProgress}
+                  variant="outline"
+                  className="gap-2 px-4 py-5 text-sm shrink-0"
+                  title="Save current progress locally"
+                >
+                  <Save className="h-4 w-4" /> Save Progress
+                </Button>
                 <Button
                   onClick={generateResume}
-                  disabled={loading}
+                  disabled={loading || !canGenerate}
                   variant="glow"
-                  className="gap-2 px-6 py-5 text-sm bg-linear-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 shrink-0"
+                  title={!canGenerate ? "Enter Full Name and Target Role to enable Generate" : "Generate resume"}
+                  className={`gap-2 px-6 py-5 text-sm shrink-0 transition-all ${
+                    canGenerate
+                      ? "bg-linear-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                      : "bg-surface-3 text-muted-foreground border border-glass-border cursor-not-allowed opacity-70"
+                  }`}
                 >
                   {loading ? (
                     <>

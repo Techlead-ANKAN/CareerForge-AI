@@ -5,6 +5,57 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import { tmpdir } from "os";
 
+const RESUME_CLS_CONTENT = String.raw`\NeedsTeXFormat{LaTeX2e}
+\ProvidesClass{resume}[2026/03/15 Lightweight resume class]
+
+\LoadClass[11pt]{article}
+\RequirePackage{ifthen}
+\RequirePackage{hyperref}
+\RequirePackage{titlesec}
+\RequirePackage{enumitem}
+\RequirePackage{parskip}
+\RequirePackage{fancyhdr}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+
+\makeatletter
+\def\@name{}
+\def\@addressone{}
+\def\@addresstwo{}
+
+\newcommand{\name}[1]{\gdef\@name{#1}}
+\renewcommand{\address}[1]{%
+  \ifthenelse{\equal{\@addressone}{}}{\gdef\@addressone{#1}}{\gdef\@addresstwo{#1}}%
+}
+
+\AtBeginDocument{%
+  \begin{center}
+    {\LARGE\bfseries \@name}\\[2pt]
+    {\@addressone}
+    \ifthenelse{\equal{\@addresstwo}{}}{}{\\{\@addresstwo}}
+  \end{center}
+  \vspace{2pt}
+}
+\makeatother
+
+\newcommand{\sectionskip}{\vspace{6pt}}
+
+\newenvironment{rSection}[1]{%
+  \sectionskip
+  {\bfseries\MakeUppercase{#1}}\\[-2pt]
+  \rule{\linewidth}{0.4pt}\\[-7pt]
+  \begin{list}{}{\setlength{\leftmargin}{0em}}
+  \item[]
+}{%
+  \end{list}
+}`;
+
 function cleanupDir(workDir: string) {
   try {
     rmSync(workDir, { recursive: true, force: true });
@@ -82,6 +133,10 @@ export async function POST(req: NextRequest) {
 
     const texFile = join(workDir, "resume.tex");
     const pdfFile = join(workDir, "resume.pdf");
+    const clsFile = join(workDir, "resume.cls");
+
+    // Provide a local resume.cls so Overleaf-style templates compile with pdflatex.
+    writeFileSync(clsFile, RESUME_CLS_CONTENT);
 
     // If photo base64 is provided, save it as photo.jpg in the work dir
     if (photo) {

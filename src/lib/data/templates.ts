@@ -12,39 +12,59 @@ export interface ResumeTemplate {
 
 export const RESUME_TEMPLATES: ResumeTemplate[] = [
   {
+    id: "faangpath-simple",
+    name: "FAANGPath Simple",
+    description: "Overleaf-inspired FAANGPath layout with compact sections and clean recruiter-friendly structure",
+    color: "from-slate-500 to-slate-700",
+    preview: "📄",
+    hasPhoto: false,
+    promptInstructions: `Create a FAANGPATH SIMPLE resume that follows the classic Overleaf FAANGPath style.
+
+REQUIRED LAYOUT CONTRACT:
+- Use \\documentclass{resume} and section blocks with \\begin{rSection}{...}
+- Header style: centered uppercase name, compact contact lines below
+- Section style: thin horizontal divider with uppercase section title
+- Keep compact recruiter-friendly spacing and one-page emphasis
+- Sections should look like: OBJECTIVE, EDUCATION, SKILLS, EXPERIENCE, PROJECTS, plus optional extras only when user provides them
+- In PROJECTS, prefer concise achievement-oriented bullet lines
+- No fake placeholders; use only user-provided data
+- Omit empty sections completely
+- Keep pdflatex-compatible output`,
+  },
+  {
     id: "modern-professional",
     name: "Modern Professional",
     description: "Clean two-column design with colored sidebar, profile photo support, and modern typography",
     color: "from-blue-500 to-indigo-600",
     preview: "💼",
     hasPhoto: true,
-    promptInstructions: `Create a MODERN PROFESSIONAL resume using this EXACT LaTeX structure:
+    promptInstructions: `Create a MODERN PROFESSIONAL resume with a polished, ATS-friendly two-column layout.
 
+Use this LaTeX setup pattern (same packages and principles):
 \\documentclass[a4paper,10pt]{article}
 \\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
-\\usepackage[margin=0pt]{geometry}
-\\usepackage{xcolor,tikz,fontawesome5,enumitem,hyperref,graphicx,parskip}
+\\usepackage[margin=0.45in]{geometry}
+\\usepackage{xcolor,tikz,fontawesome5,enumitem,hyperref,graphicx,parskip,array}
 \\setcounter{secnumdepth}{0}
 \\pagestyle{empty}
+\\setlength{\\parindent}{0pt}
+\\definecolor{primary}{HTML}{2563EB}
+\\definecolor{sidebar}{HTML}{EEF2FF}
+\\definecolor{textdark}{HTML}{111827}
+\\definecolor{textmuted}{HTML}{4B5563}
 
-CRITICAL DESIGN RULES:
-- Page background MUST be WHITE — the resume will be printed on white paper
-- Use minipage for two-column layout: left sidebar (0.32\\linewidth) and right main area (0.65\\linewidth)
-- Sidebar: use a LIGHT colored background (\\definecolor{sidebar}{HTML}{f0f4ff} — light blue-gray) NOT dark
-- All text must be dark colored for readability on white/light backgrounds
-- Right column: white background with all main sections
-- NEVER use \\section numbering — use \\section* or set \\setcounter{secnumdepth}{0}
-- Section titles: use custom commands with colored underlines, NO numbered sections like "1 Summary"
-- Photo: place circular clipped photo at top of sidebar using tikz \\clip circle INSIDE a \\begin{scope}...\\end{scope}
-- Contact info in sidebar with fontawesome5 icons: \\faIcon{envelope}, \\faIcon{phone}, \\faIcon{map-marker-alt}, \\faIcon{linkedin}, \\faIcon{github}
-- Skills in sidebar as small rounded tags/pills using \\colorbox{lightaccent}{\\small SkillName} (NOT tikz nodes)
-- Right column sections: Professional Summary, Experience, Education, Projects, Achievements
-- Experience entries: \\textbf{Role} at \\textbf{Company} \\hfill dates, then bullet items
-- Use \\begin{itemize}[leftmargin=*,nosep,label={\\textbullet}] for tight bullets
-- Define primary color: \\definecolor{primary}{HTML}{2563EB}
-- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
-- Fit everything on ONE page with compact spacing`,
+Design contract:
+- Use minipage two-column layout: left 0.31\\linewidth, right 0.65\\linewidth, with \\hfill.
+- Left sidebar has light background and compact contact + skills chips.
+- Right column has name headline, thin accent rule, clean section hierarchy.
+- Use unnumbered sections only (never numbered headings).
+- Use tight bullets: \\begin{itemize}[leftmargin=*,nosep,label={\\textbullet}].
+- Keep spacing balanced and professional. No visual clutter.
+- If no data for a section, omit it.
+- No placeholder/fake content.
+- Keep everything pdflatex-safe and one page when possible.
+- If photo is present, clip with tikz only inside \\begin{scope}...\\end{scope}.`,
   },
   {
     id: "classic-elegant",
@@ -65,22 +85,19 @@ CRITICAL DESIGN RULES:
 \\pagestyle{empty}
 
 CRITICAL DESIGN RULES:
-- Single column, classic layout — NO graphics, NO tikz, NO photos
-- Name: \\begin{center}{\\LARGE\\bfseries NAME}\\end{center} at top
-- Contact: single centered line below name using middots: email · phone · location · LinkedIn
-- Section headers: \\titleformat{\\section}{\\large\\bfseries\\uppercase}{}{0em}{} followed by \\titlerule
-- NEVER numbered sections — use \\section* or \\setcounter{secnumdepth}{0}
-- Experience: \\textbf{Company} \\hfill Location \\\\ \\textit{Role Title} \\hfill \\textit{Date Range}
-- Then bullet items with \\begin{itemize}[leftmargin=*,nosep]
-- Education: same format as experience with GPA/marks
-- Skills: comma-separated list grouped by category
-- Keep to 1 page, very clean scannable layout
-- Black and dark gray only, serif font (charter/palatino)`,
+- Single column, classic layout; no graphics, no tikz, no photos
+- Name centered at top in large serif style
+- Contact line centered below name using separators
+- Section headers with clean rule lines and no numbering
+- Experience format: company/role/date with compact bullets
+- Keep black/dark-gray palette only
+- Omit empty sections and never add fake entries
+- Keep to one page if possible`,
   },
   {
     id: "creative-modern",
     name: "Creative Modern",
-    description: "Bold accent colors, icons, skill bars, and a creative header with photo. Great for tech & design",
+    description: "Bold accent colors, icons, and a creative header with photo. Great for tech & design",
     color: "from-purple-500 to-pink-600",
     preview: "🎨",
     hasPhoto: true,
@@ -95,20 +112,13 @@ CRITICAL DESIGN RULES:
 \\pagestyle{empty}
 
 CRITICAL DESIGN RULES:
-- Page background MUST be WHITE
-- Header: A colored accent banner/strip at the top (not full dark background) with name in bold dark or white text
-- Photo circle on the right side of the header using tikz \\clip circle INSIDE a \\begin{scope}...\\end{scope} (if provided)
-- Contact row below header with fontawesome5 icons: \\faIcon{envelope} email \\quad \\faIcon{phone} phone etc.
-- Section headers: colored bold text with a thick left accent border using \\textcolor{accent}{\\rule{3pt}{12pt}} before section name
-- NEVER numbered sections — use \\section* or set secnumdepth to 0
-- Skills: display as colored bars using \\colorbox (NOT tikz progress bars — use \\textcolor{accent}{\\rule{Xcm}{6pt}} on \\textcolor{gray!30}{\\rule{3cm}{6pt}} background)
-- Experience: \\textcolor{accent}{\\textbf{Company}} \\hfill dates, role italic below, then bullets
-- Use \\begin{itemize}[leftmargin=*,nosep] for compact bullets
-- Colors: \\definecolor{accent}{HTML}{8B5CF6} \\definecolor{secondary}{HTML}{EC4899}
-- All text must be dark (black/dark gray) for readability on white background
-- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
-- Single column layout, fit on ONE page
-- Professional but visually interesting`,
+- White page background with tasteful accent color
+- Strong header hierarchy with clean spacing
+- Unnumbered section headings only
+- Compact bullets and clear role/project emphasis
+- If photo exists, circular clip inside tikz scope only
+- Keep design modern but professional, no clutter
+- Omit empty sections and never invent data`,
   },
   {
     id: "minimal-clean",
@@ -129,23 +139,17 @@ CRITICAL DESIGN RULES:
 \\pagestyle{empty}
 
 CRITICAL DESIGN RULES:
-- Ultra-minimalist single-column layout — NO graphics, NO tikz, NO photos, NO colors
-- Pure black and white only
-- Name at top left: {\\LARGE\\bfseries Name} on its own line, large and clean
-- Contact on next line: email \\textperiodcentered\\space phone \\textperiodcentered\\space location \\textperiodcentered\\space LinkedIn
-- Section headers: \\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{} with thin \\titlerule below
-- NEVER numbered sections — set secnumdepth to 0
-- Experience: \\textbf{Role}, Company \\hfill Date range, then tight bullet points
-- \\begin{itemize}[leftmargin=12pt,nosep,label={--}] for minimal bullets
-- Maximum ATS compatibility — no tables, no columns, no graphics, no fancy formatting
-- Only standard fonts, no special packages beyond basics
-- Clean whitespace between sections, content-dense bullets
-- MUST fit on 1 page`,
+- Minimal single-column ATS-first style
+- No tikz, no graphics, no photo
+- Strong text hierarchy with simple section rules
+- Unnumbered sections and compact bullets
+- Omit empty sections, no placeholders
+- Keep clean whitespace and one-page readability`,
   },
   {
     id: "tech-developer",
     name: "Tech Developer",
-    description: "Designed for developers. GitHub-style layout with skill tags, project links, and code-inspired design",
+    description: "Designed for developers. Skill tags, project links, and code-inspired design",
     color: "from-cyan-500 to-blue-600",
     preview: "💻",
     hasPhoto: true,
@@ -160,25 +164,17 @@ CRITICAL DESIGN RULES:
 \\pagestyle{empty}
 
 CRITICAL DESIGN RULES:
-- Page background MUST be WHITE — no dark theme
-- Header: Name in large bold dark text with a colored accent line (\\textcolor{accent}{\\rule{\\linewidth}{2pt}}) below
-- Contact row with fontawesome5 icons: \\faIcon{github} \\faIcon{linkedin} \\faIcon{envelope} \\faIcon{phone}
-- Photo (if provided): small circular photo in top-right corner using tikz \\clip circle INSIDE a \\begin{scope}...\\end{scope}
-- NEVER numbered sections — use \\section* or secnumdepth 0
-- Section headers: \\textcolor{accent}{\\textbf{\\uppercase{Section Name}}} with thin accent-colored \\rule below
-- Skills: display as rounded tag pills using \\colorbox{tagbg}{\\small SkillName} (prefer colorbox over tikz nodes)
-- Define: \\definecolor{accent}{HTML}{06b6d4} \\definecolor{tagbg}{HTML}{e0f2fe}
-- Technical Skills organized by category: Languages, Frameworks, Tools, Databases
-- Projects section prominent: \\textbf{Project Name} | {\\small tech stack tags} \\\\ description with bullets
-- Experience: \\textbf{Role} at \\textbf{Company} \\hfill dates, tech stack emphasized
-- All text dark (black/charcoal) for readability
-- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
-- Fit on ONE page`,
+- White background with cyan accent system
+- Clear header, contact icons, and scannable sections
+- Highlight projects and technical skills cleanly
+- Unnumbered sections only
+- Keep tikz minimal; clip photo only inside scope when present
+- Omit empty sections, no fake content`,
   },
   {
     id: "executive-premium",
     name: "Executive Premium",
-    description: "Sophisticated two-column layout for senior roles. Gold accents, refined typography",
+    description: "Sophisticated two-column layout for senior roles with refined typography",
     color: "from-amber-500 to-yellow-600",
     preview: "👔",
     hasPhoto: true,
@@ -188,28 +184,18 @@ CRITICAL DESIGN RULES:
 \\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
 \\usepackage{charter}
-\\usepackage[margin=0pt]{geometry}
+\\usepackage[margin=0.45in]{geometry}
 \\usepackage{xcolor,tikz,fontawesome5,enumitem,hyperref,titlesec,graphicx,parskip}
 \\setcounter{secnumdepth}{0}
 \\pagestyle{empty}
 
 CRITICAL DESIGN RULES:
-- Page background MUST be WHITE
-- Use minipage for two columns: left column (0.33\\linewidth) and right column (0.64\\linewidth)
-- Left column: LIGHT warm gray background (\\definecolor{leftbg}{HTML}{faf8f5}) using tikz filled rectangle — NOT dark
-- Right column: white background with name in large navy bold at top, gold accent line below name
-- NEVER use numbered sections — use \\section* or secnumdepth 0
-- Section headers in right column: \\textcolor{navy}{\\textbf{\\uppercase{Section}}} with gold \\rule below
-- Section headers in left column: \\textcolor{gold}{\\textbf{Section}} simple bold
-- Colors: \\definecolor{gold}{HTML}{D97706} \\definecolor{navy}{HTML}{1e3a5f}
-- All text must be dark for readability on white/light backgrounds
-- Professional Summary at top of right column
-- Experience: \\textbf{Role} \\hfill dates \\\\ \\textit{Company} \\\\ bullets
-- Photo: circular clipped at top of left column INSIDE a \\begin{scope}...\\end{scope}
-- Use charter serif font for elegance
-- TIKZ SAFETY: wrap all \\clip in scope, no \\foreach, no pgfmath, keep tikz minimal
-- Refined, sophisticated look — not flashy
-- Fit on ONE page`,
+- Refined two-column executive style with light palette
+- Right column carries main narrative and achievements
+- Left column contains concise profile/contact/support info
+- Unnumbered sections and elegant spacing
+- Photo clip only inside scope when present
+- Omit empty sections; do not invent content`,
   },
 ];
 

@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const [modelSaved, setModelSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testDiagnostics, setTestDiagnostics] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("gemini_api_key")?.trim();
@@ -76,6 +77,7 @@ export default function SettingsPage() {
     setModelOptions(getModelOptions());
     setSelectedModel("gemini-2.0-flash");
     setTestResult(null);
+    setTestDiagnostics(null);
   };
 
   const handleModelChange = (model: string) => {
@@ -83,66 +85,133 @@ export default function SettingsPage() {
     localStorage.setItem("gemini_model", model);
     setModelSaved(true);
     setTestResult(null);
+    setTestDiagnostics(null);
     setTimeout(() => setModelSaved(false), 2000);
+  };
+
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error("Request timed out. Check your network and retry.")), ms);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
   };
 
   const testConnection = async () => {
     if (!apiKey.trim()) {
       setTestResult({ ok: false, message: "Please enter an API key first." });
+      setTestDiagnostics("Validation: Missing API key input");
       return;
     }
 
     setTesting(true);
     setTestResult(null);
+    setTestDiagnostics(null);
 
     try {
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(apiKey.trim());
+      const key = apiKey.trim();
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
+      const resp = await withTimeout(fetch(endpoint, { method: "GET" }), 15000);
 
-      const available = modelOptions.length > 0 ? modelOptions : getModelOptions();
-      const tryModels = [selectedModel, ...available.filter((m) => m !== selectedModel)].slice(0, 2);
+      if (!resp.ok) {
+        const errorText = await resp.text().catch(() => "");
+        const combined = `${resp.status} ${resp.statusText} ${errorText}`;
+        const lower = combined.toLowerCase();
+        const compactBody = errorText.replace(/\s+/g, " ").trim();
 
-      let lastError: unknown = null;
-      for (const modelName of tryModels) {
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: { maxOutputTokens: 1, temperature: 0 },
+        let reason = compactBody || resp.statusText || "Unknown error";
+        if (compactBody) {
+          try {
+            const parsed = JSON.parse(errorText) as {
+              error?: {
+                status?: string;
+                message?: string;
+              };
+            };
+            const statusPart = parsed.error?.status || "";
+            const messagePart = parsed.error?.message || "";
+            const parsedReason = [statusPart, messagePart].filter(Boolean).join(" | ");
+            if (parsedReason) reason = parsedReason;
+          } catch {
+            // Keep compact raw body when response is not JSON.
+          }
+        }
+
+        setTestDiagnostics(`HTTP ${resp.status} ${resp.statusText || ""} | ${reason.slice(0, 220)}`.trim());
+
+        if (resp.status === 401 || resp.status === 403 || lower.includes("api key") || lower.includes("permission")) {
+          setTestResult({ ok: false, message: "🔑 Invalid API key. Please check and try again." });
+          return;
+        }
+
+        if (resp.status === 429 || lower.includes("quota") || lower.includes("rate")) {
+          setTestResult({
+            ok: false,
+            message: "⚠️ Google API quota/rate limit is exhausted for this account/project. A new key alone will not fix this.",
           });
-          const result = await model.generateContent("OK");
-          const text = result.response.text();
-          if (text) {
-            setSelectedModel(modelName);
-            localStorage.setItem("gemini_model", modelName);
-            setTestResult({ ok: true, message: `✅ Connected! Model "${modelName}" responded.` });
-            return;
-          }
-        } catch (modelErr: unknown) {
-          lastError = modelErr;
-          const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-          if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
-            continue;
-          }
-          throw modelErr;
+          return;
+        }
+
+        setTestResult({ ok: false, message: `Error: ${combined.slice(0, 160)}` });
+        return;
+      }
+
+      type ListModelsResponse = {
+        models?: Array<{
+          name?: string;
+          supportedGenerationMethods?: string[];
+        }>;
+      };
+
+      const data = (await resp.json()) as ListModelsResponse;
+      const discovered = (data.models || [])
+        .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"))
+        .map((m) => (m.name?.startsWith("models/") ? m.name.slice("models/".length) : m.name || ""))
+        .filter((name) => name.toLowerCase().startsWith("gemini"))
+        .filter((name) => !name.toLowerCase().includes("embedding"));
+
+      const finalModels = Array.from(new Set(discovered));
+      if (finalModels.length > 0) {
+        setModelOptions(finalModels);
+        if (!finalModels.includes(selectedModel)) {
+          const next = finalModels[0];
+          setSelectedModel(next);
+          localStorage.setItem("gemini_model", next);
         }
       }
 
-      const msg = lastError instanceof Error ? lastError.message : String(lastError);
-      if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
-        setTestResult({ ok: false, message: "⚠️ Quota/rate limit hit for available models. Wait for reset or enable billing." });
-      } else {
-        setTestResult({ ok: false, message: "Model returned empty response." });
-      }
+      setTestResult({
+        ok: true,
+        message:
+          finalModels.length > 0
+            ? `✅ API key is valid. ${finalModels.length} Gemini models are accessible. (This check does not consume generation quota.)`
+            : "✅ API key is valid, but no Gemini generateContent models were returned for this project.",
+      });
+      setTestDiagnostics(`HTTP ${resp.status} ${resp.statusText || "OK"} | listModels succeeded`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("err_network_changed")) {
+        setTestResult({ ok: false, message: "🌐 Network changed during request. Please retry." });
+        setTestDiagnostics(`Network: ${msg.slice(0, 220)}`);
+        return;
+      }
       if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
-        setTestResult({ ok: false, message: "⚠️ Quota/rate limit hit for available models. Wait for reset or enable billing." });
+        setTestResult({ ok: false, message: "⚠️ Google API quota/rate limit exhausted. This is account/project-side, not a key format issue." });
+        setTestDiagnostics(`Quota: ${msg.slice(0, 220)}`);
       } else if (msg.includes("401") || msg.includes("403")) {
         setTestResult({ ok: false, message: "🔑 Invalid API key. Please check and try again." });
+        setTestDiagnostics(`Auth: ${msg.slice(0, 220)}`);
       } else if (msg.includes("404")) {
-        setTestResult({ ok: false, message: `❌ Model "${selectedModel}" not found. Try a different model.` });
+        setTestResult({ ok: false, message: "❌ API endpoint/model metadata not found. Try again in a minute." });
+        setTestDiagnostics(`Not found: ${msg.slice(0, 220)}`);
       } else {
         setTestResult({ ok: false, message: `Error: ${msg.slice(0, 150)}` });
+        setTestDiagnostics(`Unhandled: ${msg.slice(0, 220)}`);
       }
     } finally {
       setTesting(false);
@@ -197,6 +266,7 @@ export default function SettingsPage() {
                 <label className="text-xs font-medium text-muted-foreground">API Key</label>
                 <Input
                   type="password"
+                  autoComplete="new-password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Enter your Gemini API key..."
@@ -276,6 +346,12 @@ export default function SettingsPage() {
                 {testResult.message}
               </div>
             )}
+
+            {testDiagnostics && (
+              <div className="mt-2 rounded-lg border border-glass-border bg-glass-bg/60 px-3 py-2 text-[11px] text-muted-foreground wrap-break-word">
+                <span className="font-semibold">Diagnostics:</span> {testDiagnostics}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -302,7 +378,7 @@ export default function SettingsPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
-                Use the <strong className="text-foreground">Test Connection</strong> button to verify which model works
+                <strong className="text-foreground">Test Connection</strong> validates key/model access without using generation quota
               </li>
               <li className="flex items-start gap-2">
                 <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
