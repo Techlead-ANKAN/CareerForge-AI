@@ -45,6 +45,27 @@ interface EducationEntry {
   coursework: string;
 }
 
+interface ExperienceEntry {
+  id: string;
+  role: string;
+  company: string;
+  duration: string;
+  location: string;
+  points: string;
+}
+
+interface ProjectEntry {
+  id: string;
+  name: string;
+  link: string;
+  points: string;
+}
+
+interface SkillsEntry {
+  technical: string;
+  soft: string;
+}
+
 const emptyEducation = (): EducationEntry => ({
   id: crypto.randomUUID(),
   degree: "",
@@ -56,6 +77,22 @@ const emptyEducation = (): EducationEntry => ({
   gradeValue: "",
   gradeScale: "10",
   coursework: "",
+});
+
+const emptyExperience = (): ExperienceEntry => ({
+  id: crypto.randomUUID(),
+  role: "",
+  company: "",
+  duration: "",
+  location: "",
+  points: "",
+});
+
+const emptyProject = (): ProjectEntry => ({
+  id: crypto.randomUUID(),
+  name: "",
+  link: "",
+  points: "",
 });
 
 const gradeTypes = [
@@ -88,6 +125,63 @@ function formatEducationsToString(educations: EducationEntry[]): string {
     .join("\n\n");
 }
 
+function formatExperiencesToString(experiences: ExperienceEntry[]): string {
+  return experiences
+    .filter((e) => e.role || e.company || e.points)
+    .map((e) => {
+      const parts: string[] = [];
+      if (e.role) parts.push(`Role: ${e.role}`);
+      if (e.company) parts.push(`Company: ${e.company}`);
+      if (e.duration) parts.push(`Duration: ${e.duration}`);
+      if (e.location) parts.push(`Location: ${e.location}`);
+
+      const bullets = e.points
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => line.replace(/^[-•*]\s*/, ""));
+
+      if (bullets.length > 0) {
+        parts.push("Description Points:");
+        parts.push(...bullets.map((b) => `- ${b}`));
+      }
+
+      return parts.join("\n");
+    })
+    .join("\n\n");
+}
+
+function formatProjectsToString(projects: ProjectEntry[]): string {
+  return projects
+    .filter((p) => p.name || p.points || p.link)
+    .map((p) => {
+      const parts: string[] = [];
+      if (p.name) parts.push(`Project Name: ${p.name}`);
+      if (p.link) parts.push(`Project Link: ${p.link}`);
+
+      const bullets = p.points
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => line.replace(/^[-•*]\s*/, ""));
+
+      if (bullets.length > 0) {
+        parts.push("Description Points:");
+        parts.push(...bullets.map((b) => `- ${b}`));
+      }
+
+      return parts.join("\n");
+    })
+    .join("\n\n");
+}
+
+function formatSkillsToString(skills: SkillsEntry): string {
+  const parts: string[] = [];
+  if (skills.technical.trim()) parts.push(`Technical Skills: ${skills.technical.trim()}`);
+  if (skills.soft.trim()) parts.push(`Soft Skills: ${skills.soft.trim()}`);
+  return parts.join("\n");
+}
+
 interface ResumeForm {
   fullName: string;
   email: string;
@@ -111,6 +205,9 @@ interface ResumeDraft {
   activeSection: string;
   photoBase64: string | null;
   educations: EducationEntry[];
+  experiences: ExperienceEntry[];
+  projects: ProjectEntry[];
+  skillsEntry: SkillsEntry;
   savedAt: number;
 }
 
@@ -145,6 +242,9 @@ export default function ResumeBuilderPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [educations, setEducations] = useState<EducationEntry[]>([emptyEducation()]);
+  const [experiences, setExperiences] = useState<ExperienceEntry[]>([emptyExperience()]);
+  const [projects, setProjects] = useState<ProjectEntry[]>([emptyProject()]);
+  const [skillsEntry, setSkillsEntry] = useState<SkillsEntry>({ technical: "", soft: "" });
   const [jdFileName, setJdFileName] = useState<string | null>(null);
   const [jdLoading, setJdLoading] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
@@ -178,6 +278,45 @@ export default function ResumeBuilderPage() {
 
       setForm(nextForm);
       setEducations(nextEducations);
+
+      let nextExperiences: ExperienceEntry[] = [emptyExperience()];
+      if (Array.isArray(draft.experiences) && draft.experiences.length > 0) {
+        nextExperiences = draft.experiences.map((exp) => ({
+          ...emptyExperience(),
+          ...exp,
+          id: exp.id || crypto.randomUUID(),
+        }));
+      }
+      setExperiences(nextExperiences);
+      nextForm = {
+        ...nextForm,
+        experience: formatExperiencesToString(nextExperiences),
+      };
+
+      let nextProjects: ProjectEntry[] = [emptyProject()];
+      if (Array.isArray(draft.projects) && draft.projects.length > 0) {
+        nextProjects = draft.projects.map((proj) => ({
+          ...emptyProject(),
+          ...proj,
+          id: proj.id || crypto.randomUUID(),
+        }));
+      }
+      setProjects(nextProjects);
+      nextForm = {
+        ...nextForm,
+        projects: formatProjectsToString(nextProjects),
+      };
+
+      const restoredSkills = {
+        technical: draft.skillsEntry?.technical || "",
+        soft: draft.skillsEntry?.soft || "",
+      };
+      setSkillsEntry(restoredSkills);
+      nextForm = {
+        ...nextForm,
+        skills: formatSkillsToString(restoredSkills),
+      };
+      setForm(nextForm);
 
       if (typeof draft.selectedTemplate === "string" && draft.selectedTemplate) {
         setSelectedTemplate(draft.selectedTemplate);
@@ -222,6 +361,64 @@ export default function ResumeBuilderPage() {
 
   const updateForm = (field: keyof ResumeForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateExperience = (id: string, field: keyof ExperienceEntry, value: string) => {
+    setExperiences((prev) => {
+      const updated = prev.map((e) => (e.id === id ? { ...e, [field]: value } : e));
+      setForm((f) => ({ ...f, experience: formatExperiencesToString(updated) }));
+      return updated;
+    });
+  };
+
+  const addExperience = () => {
+    setExperiences((prev) => {
+      const updated = [...prev, emptyExperience()];
+      setForm((f) => ({ ...f, experience: formatExperiencesToString(updated) }));
+      return updated;
+    });
+  };
+
+  const removeExperience = (id: string) => {
+    setExperiences((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      const remaining = updated.length > 0 ? updated : [emptyExperience()];
+      setForm((f) => ({ ...f, experience: formatExperiencesToString(remaining) }));
+      return remaining;
+    });
+  };
+
+  const updateProject = (id: string, field: keyof ProjectEntry, value: string) => {
+    setProjects((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, [field]: value } : p));
+      setForm((f) => ({ ...f, projects: formatProjectsToString(updated) }));
+      return updated;
+    });
+  };
+
+  const addProject = () => {
+    setProjects((prev) => {
+      const updated = [...prev, emptyProject()];
+      setForm((f) => ({ ...f, projects: formatProjectsToString(updated) }));
+      return updated;
+    });
+  };
+
+  const removeProject = (id: string) => {
+    setProjects((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      const remaining = updated.length > 0 ? updated : [emptyProject()];
+      setForm((f) => ({ ...f, projects: formatProjectsToString(remaining) }));
+      return remaining;
+    });
+  };
+
+  const updateSkillsEntry = (field: keyof SkillsEntry, value: string) => {
+    setSkillsEntry((prev) => {
+      const next = { ...prev, [field]: value };
+      setForm((f) => ({ ...f, skills: formatSkillsToString(next) }));
+      return next;
+    });
   };
 
   const extractTextFromPDF = async (file: File): Promise<string> => {
@@ -289,11 +486,17 @@ export default function ResumeBuilderPage() {
         form: {
           ...form,
           education: formatEducationsToString(educations),
+          experience: formatExperiencesToString(experiences),
+          projects: formatProjectsToString(projects),
+          skills: formatSkillsToString(skillsEntry),
         },
         selectedTemplate,
         activeSection,
         photoBase64,
         educations,
+        experiences,
+        projects,
+        skillsEntry,
         savedAt: Date.now(),
       };
 
@@ -1738,47 +1941,130 @@ ${fixedCode}`;
 
           {/* Experience */}
           {activeSection === "experience" && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-              <Card>
-                <CardContent className="p-6 space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold flex items-center gap-2.5">
-                      <Briefcase className="h-5 w-5 text-primary" />
-                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Work Experience</span>
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-1">Describe your professional experience with achievements</p>
-                  </div>
-                  <Textarea
-                    placeholder={"List your work experience\n\nExample:\nSoftware Engineer at Google, Jan 2023 - Present\n- Built microservices handling 1M+ requests/day\n- Reduced API latency by 40%"}
-                    rows={12}
-                    value={form.experience}
-                    onChange={(e) => updateForm("experience", e.target.value)}
-                  />
-                </CardContent>
-              </Card>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold flex items-center gap-2.5">
+                    <Briefcase className="h-5 w-5 text-primary" />
+                    <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Work Experience</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">Add separate work experience entries with clear bullet points</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={addExperience} className="gap-1.5 text-xs">
+                  <Plus className="h-3.5 w-3.5" /> Add Experience
+                </Button>
+              </div>
+
+              {experiences.map((exp, idx) => (
+                <Card key={exp.id}>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground">Experience Entry {idx + 1}</span>
+                      {experiences.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeExperience(exp.id)}
+                          className="gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 h-7"
+                        >
+                          <Trash2 className="h-3 w-3" /> Remove
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Role</label>
+                        <Input placeholder="Software Engineer" value={exp.role} onChange={(e) => updateExperience(exp.id, "role", e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Company</label>
+                        <Input placeholder="Google" value={exp.company} onChange={(e) => updateExperience(exp.id, "company", e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Duration</label>
+                        <Input placeholder="Jan 2023 - Present" value={exp.duration} onChange={(e) => updateExperience(exp.id, "duration", e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Location</label>
+                        <Input placeholder="Bangalore, India" value={exp.location} onChange={(e) => updateExperience(exp.id, "location", e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted-foreground">Description Points</label>
+                      <Textarea
+                        rows={5}
+                        placeholder={"- Built microservices handling 1M+ requests/day\n- Reduced API latency by 40%"}
+                        value={exp.points}
+                        onChange={(e) => updateExperience(exp.id, "points", e.target.value)}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </motion.div>
           )}
 
           {/* Projects */}
           {activeSection === "projects" && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-              <Card>
-                <CardContent className="p-6 space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold flex items-center gap-2.5">
-                      <Code className="h-5 w-5 text-primary" />
-                      <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Projects</span>
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-1">Showcase your best personal or open-source projects</p>
-                  </div>
-                  <Textarea
-                    placeholder={"List your key projects\n\nExample:\nAI Chat Application | React, Node.js, OpenAI API\n- Built a real-time chat app with AI responses\n- 500+ active users"}
-                    rows={12}
-                    value={form.projects}
-                    onChange={(e) => updateForm("projects", e.target.value)}
-                  />
-                </CardContent>
-              </Card>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold flex items-center gap-2.5">
+                    <Code className="h-5 w-5 text-primary" />
+                    <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Projects</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">Add each project with title, link, and bullet-point description</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={addProject} className="gap-1.5 text-xs">
+                  <Plus className="h-3.5 w-3.5" /> Add Project
+                </Button>
+              </div>
+
+              {projects.map((proj, idx) => (
+                <Card key={proj.id}>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground">Project Entry {idx + 1}</span>
+                      {projects.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeProject(proj.id)}
+                          className="gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 h-7"
+                        >
+                          <Trash2 className="h-3 w-3" /> Remove
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Project Name</label>
+                        <Input placeholder="JobNest" value={proj.name} onChange={(e) => updateProject(proj.id, "name", e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">Project Link</label>
+                        <Input placeholder="https://github.com/you/project" value={proj.link} onChange={(e) => updateProject(proj.id, "link", e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted-foreground">Description Points</label>
+                      <Textarea
+                        rows={5}
+                        placeholder={"- Built job listing and application interface\n- Designed reusable UI components"}
+                        value={proj.points}
+                        onChange={(e) => updateProject(proj.id, "points", e.target.value)}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </motion.div>
           )}
 
@@ -1792,22 +2078,31 @@ ${fixedCode}`;
                       <Trophy className="h-5 w-5 text-primary" />
                       <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Skills & Achievements</span>
                     </h2>
-                    <p className="text-xs text-muted-foreground mt-1">Technical skills and notable accomplishments</p>
+                    <p className="text-xs text-muted-foreground mt-1">Add technical and soft skills separately</p>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Skills</label>
+                    <label className="text-xs font-medium text-muted-foreground">Technical Skills</label>
                     <Textarea
-                      placeholder="Python, Java, React, Node.js, AWS, Docker, Git..."
+                      placeholder="HTML, CSS, JavaScript, React, Node.js, SQL..."
                       rows={4}
-                      value={form.skills}
-                      onChange={(e) => updateForm("skills", e.target.value)}
+                      value={skillsEntry.technical}
+                      onChange={(e) => updateSkillsEntry("technical", e.target.value)}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Achievements & Certifications</label>
+                    <label className="text-xs font-medium text-muted-foreground">Soft Skills</label>
+                    <Textarea
+                      placeholder="Communication, Teamwork, Leadership, Problem Solving..."
+                      rows={3}
+                      value={skillsEntry.soft}
+                      onChange={(e) => updateSkillsEntry("soft", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Achievements & Certifications (optional)</label>
                     <Textarea
                       placeholder={"AWS Certified\n1st in Hackathon\nPublished paper in IEEE"}
-                      rows={5}
+                      rows={4}
                       value={form.achievements}
                       onChange={(e) => updateForm("achievements", e.target.value)}
                     />

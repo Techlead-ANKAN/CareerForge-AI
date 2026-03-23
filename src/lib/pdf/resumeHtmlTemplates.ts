@@ -15,6 +15,11 @@ export type ResumeFormData = {
   achievements: string;
 };
 
+function shouldUseModernCompact(payload: ResumePdfPayload): boolean {
+  if (payload.templateId !== "modern-professional") return false;
+  return false;
+}
+
 export type ResumeEducationEntry = {
   id: string;
   degree: string;
@@ -115,7 +120,7 @@ function renderEducation(educations: ResumeEducationEntry[], fallbackText: strin
 
 function renderHeader(payload: ResumePdfPayload): string {
   const { form } = payload;
-  const showPhoto = payload.templateId === "tech-developer" && Boolean(payload.photoBase64);
+  const showPhoto = (payload.templateId === "tech-developer" || payload.templateId === "modern-professional") && Boolean(payload.photoBase64);
 
   const links: string[] = [];
   if (form.email.trim()) {
@@ -232,23 +237,257 @@ function renderBulletParagraph(lines: string[]): string {
   return `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
 }
 
-function renderBody(payload: ResumePdfPayload): string {
+type ExperienceBlock = {
+  role: string;
+  company: string;
+  duration: string;
+  location: string;
+  points: string[];
+};
+
+type ProjectBlock = {
+  name: string;
+  link: string;
+  points: string[];
+};
+
+function parseExperienceBlocks(text: string): ExperienceBlock[] {
+  const entries = text
+    .split(/\n\s*\n/g)
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  const blocks: ExperienceBlock[] = [];
+  for (const entry of entries) {
+    const lines = entry.split("\n").map((l) => l.trim()).filter(Boolean);
+    const block: ExperienceBlock = { role: "", company: "", duration: "", location: "", points: [] };
+
+    let inPoints = false;
+    for (const line of lines) {
+      if (/^role\s*:/i.test(line)) {
+        block.role = line.replace(/^role\s*:/i, "").trim();
+        inPoints = false;
+      } else if (/^company\s*:/i.test(line)) {
+        block.company = line.replace(/^company\s*:/i, "").trim();
+        inPoints = false;
+      } else if (/^duration\s*:/i.test(line)) {
+        block.duration = line.replace(/^duration\s*:/i, "").trim();
+        inPoints = false;
+      } else if (/^location\s*:/i.test(line)) {
+        block.location = line.replace(/^location\s*:/i, "").trim();
+        inPoints = false;
+      } else if (/^description\s+points\s*:/i.test(line)) {
+        inPoints = true;
+      } else if (/^[-*•]\s*/.test(line)) {
+        block.points.push(line.replace(/^[-*•]\s*/, "").trim());
+      } else if (inPoints) {
+        block.points.push(line);
+      }
+    }
+
+    if (block.role || block.company || block.points.length > 0) {
+      blocks.push(block);
+    }
+  }
+
+  return blocks;
+}
+
+function parseProjectBlocks(text: string): ProjectBlock[] {
+  const entries = text
+    .split(/\n\s*\n/g)
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  const blocks: ProjectBlock[] = [];
+  for (const entry of entries) {
+    const lines = entry.split("\n").map((l) => l.trim()).filter(Boolean);
+    const block: ProjectBlock = { name: "", link: "", points: [] };
+
+    let inPoints = false;
+    for (const line of lines) {
+      if (/^project\s+name\s*:/i.test(line)) {
+        block.name = line.replace(/^project\s+name\s*:/i, "").trim();
+        inPoints = false;
+      } else if (/^project\s+link\s*:/i.test(line)) {
+        block.link = line.replace(/^project\s+link\s*:/i, "").trim();
+        inPoints = false;
+      } else if (/^description\s+points\s*:/i.test(line)) {
+        inPoints = true;
+      } else if (/^[-*•]\s*/.test(line)) {
+        block.points.push(line.replace(/^[-*•]\s*/, "").trim());
+      } else if (inPoints) {
+        block.points.push(line);
+      }
+    }
+
+    if (block.name || block.points.length > 0) {
+      blocks.push(block);
+    }
+  }
+
+  return blocks;
+}
+
+function buildObjectiveLines(form: ResumeFormData): string[] {
+  const fromSummary = cleanInvisible(form.summary)
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const lines: string[] = [...fromSummary];
+  const role = form.targetRole.trim() || "professional role";
+
+  const fallback = [
+    `Seeking a ${role} position where I can contribute to impactful projects.`,
+    "Focused on delivering clean, maintainable, and user-centric solutions.",
+    "Strong collaboration, communication, and problem-solving mindset.",
+    "Committed to continuous learning and measurable outcome-driven work.",
+  ];
+
+  for (const f of fallback) {
+    if (lines.length >= 4) break;
+    lines.push(f);
+  }
+
+  return lines.slice(0, 4);
+}
+
+function renderExperienceBlocks(text: string): string {
+  const blocks = parseExperienceBlocks(text);
+  if (blocks.length === 0) return "";
+
+  return blocks
+    .map((b) => `<div class="exp-item">
+      <div class="item-head">
+        <div class="item-title">${escapeHtml(joinNonEmpty([b.role, b.company], " | "))}</div>
+        <div class="item-meta">${escapeHtml(joinNonEmpty([b.duration, b.location], " | "))}</div>
+      </div>
+      ${renderBulletParagraph(b.points)}
+    </div>`)
+    .join("");
+}
+
+function renderProjectBlocks(text: string): string {
+  const blocks = parseProjectBlocks(text);
+  if (blocks.length === 0) return "";
+
+  return blocks
+    .map((b) => `<div class="project-item">
+      <div class="item-head">
+        <div class="item-title">${escapeHtml(b.name || "Project")}</div>
+        ${b.link ? `<div class="item-meta"><a href="${escapeHtml(normalizeUrl(b.link))}">${escapeHtml(b.link)}</a></div>` : ""}
+      </div>
+      ${renderBulletParagraph(b.points)}
+    </div>`)
+    .join("");
+}
+
+function renderBody(payload: ResumePdfPayload, modernCompact = false): string {
   const { form, educations } = payload;
   const meta = parseMeta(form);
 
-  const objective = form.summary.trim() || `${form.targetRole || "Professional"} candidate seeking suitable opportunities.`;
+  const objectiveLines = buildObjectiveLines(form);
   const experienceLines = splitLines(form.experience);
   const projectLines = splitLines(form.projects);
+
+  if (payload.templateId === "modern-professional") {
+    const row = (label: string, body: string) => {
+      if (!body.trim()) return "";
+      return `<section class="modern-row">
+        <div class="modern-label">${escapeHtml(label)}</div>
+        <div class="modern-content">${body}</div>
+      </section>`;
+    };
+
+    const summaryText = `<p>${objectiveLines.map((l) => escapeHtml(l)).join(" ")}</p>`;
+    const experienceBody = renderExperienceBlocks(form.experience) || renderBulletLines(experienceLines);
+    const educationBody = renderEducation(educations, form.education);
+    const projectBody = renderProjectBlocks(form.projects) || renderBulletLines(projectLines);
+    const skillsBody = renderTechnicalSkills(meta.technical) || renderBulletParagraph(splitLines(form.skills));
+
+    const rawAchievements = splitLines(form.achievements);
+    const seen = new Set<string>();
+    const certificates: string[] = [];
+    const awards: string[] = [];
+    const publications: string[] = [];
+    const affiliations: string[] = [];
+
+    // Assign each achievement to a single best-fit bucket so rows never repeat the same line.
+    for (const line of rawAchievements) {
+      const key = line.toLowerCase();
+      if (seen.has(key)) continue;
+
+      if (/publication|published|paper|journal/i.test(line)) {
+        publications.push(line);
+        seen.add(key);
+        continue;
+      }
+
+      if (/affiliation|member|volunteer|community|club/i.test(line)) {
+        affiliations.push(line);
+        seen.add(key);
+        continue;
+      }
+
+      if (/cert|certificate|course/i.test(line)) {
+        certificates.push(line);
+        seen.add(key);
+        continue;
+      }
+
+      if (/award|winner|rank|achievement/i.test(line)) {
+        awards.push(line);
+        seen.add(key);
+      }
+    }
+
+    // Fallback only fills missing slots and still avoids duplicates.
+    for (const line of rawAchievements) {
+      const key = line.toLowerCase();
+      if (seen.has(key)) continue;
+      if (certificates.length < 3) {
+        certificates.push(line);
+        seen.add(key);
+        continue;
+      }
+      if (awards.length < 3) {
+        awards.push(line);
+        seen.add(key);
+      }
+    }
+
+    const hasSummary = summaryText.trim().length > 0;
+    const hasEducation = educationBody.trim().length > 0;
+    const hasProjects = projectBody.trim().length > 0;
+    const hasSkills = skillsBody.trim().length > 0;
+    const hasExperience = experienceBody.trim().length > 0;
+    const isMandatoryOnlyFillMode = !hasExperience && hasSummary && hasEducation && hasProjects && hasSkills;
+
+    const rows = [
+      row("Summary", summaryText),
+      row("Education", educationBody),
+      row("Skills", skillsBody),
+      row("Projects", projectBody),
+      row("Experience", experienceBody),
+      row("Certificate", renderBulletParagraph(certificates)),
+      row("Awards", renderBulletParagraph(awards)),
+      row("Publications", renderBulletParagraph(publications)),
+      row("Affiliations", renderBulletParagraph(affiliations)),
+    ].join("");
+
+    return `<div class="modern-layout ${modernCompact ? "is-compact" : "is-expanded"} ${isMandatoryOnlyFillMode ? "is-low-content" : ""}">${rows}</div>`;
+  }
 
   if (payload.templateId === "tech-developer") {
     const declarationText = meta.declaration || "";
     return [
-      renderSection("Career Objective", `<p>${escapeHtml(objective)}</p>`),
+      renderSection("Career Objective", renderBulletParagraph(objectiveLines)),
       renderSection("Education", renderEducation(educations, form.education)),
       renderSection("Technical Skills", renderTechnicalSkills(meta.technical)),
       renderSection("Subjects Of Interest", renderBulletParagraph(meta.subjectsOfInterest)),
-      renderSection("Experience", renderBulletParagraph(experienceLines)),
-      renderSection("Projects", renderBulletParagraph(projectLines)),
+      renderSection("Experience", renderExperienceBlocks(form.experience) || renderBulletParagraph(experienceLines)),
+      renderSection("Projects", renderProjectBlocks(form.projects) || renderBulletParagraph(projectLines)),
       renderSection("Additional Skills", renderBulletParagraph(meta.additionalSkills)),
       renderSection("Additional Details", renderBulletParagraph(meta.additionalDetails)),
       renderSection("Declaration", declarationText ? `<p>${escapeHtml(declarationText)}</p>` : ""),
@@ -256,11 +495,11 @@ function renderBody(payload: ResumePdfPayload): string {
   }
 
   return [
-    renderSection("Objective", `<p>${escapeHtml(objective)}</p>`),
+    renderSection("Objective", renderBulletParagraph(objectiveLines)),
     renderSection("Education", renderEducation(educations, form.education)),
     renderSection("Skills", renderTechnicalSkills(meta.technical)),
-    renderSection("Experience", renderBulletLines(experienceLines)),
-    renderSection("Projects", renderBulletLines(projectLines)),
+    renderSection("Experience", renderExperienceBlocks(form.experience) || renderBulletLines(experienceLines)),
+    renderSection("Projects", renderProjectBlocks(form.projects) || renderBulletLines(projectLines)),
     renderSection("Extra-Curricular Activities", renderBulletLines(meta.additionalSkills)),
   ].join("");
 }
@@ -286,8 +525,15 @@ function getTheme(templateId: string): { className: string; accent: string; font
 
 export function renderResumeHtml(payload: ResumePdfPayload): string {
   const theme = getTheme(payload.templateId);
+  const modernCompact = shouldUseModernCompact(payload);
+  const modernDensityClass =
+    payload.templateId === "modern-professional"
+      ? modernCompact
+        ? "modern-compact"
+        : "modern-expanded"
+      : "";
   const header = renderHeader(payload);
-  const body = renderBody(payload);
+  const body = renderBody(payload, modernCompact);
 
   return `<!doctype html>
 <html>
@@ -374,6 +620,16 @@ export function renderResumeHtml(payload: ResumePdfPayload): string {
       }
 
       .edu-item { margin-top: 6px; }
+      .exp-item, .project-item { margin-top: 6px; }
+      .item-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .item-title { font-size: 12.5px; font-weight: 700; }
+      .item-meta { font-size: 11px; color: #374151; white-space: nowrap; }
+      .item-meta a { color: var(--accent); text-decoration: none; }
       .edu-head {
         display: flex;
         justify-content: space-between;
@@ -399,6 +655,154 @@ export function renderResumeHtml(payload: ResumePdfPayload): string {
         font-size: 32px;
         letter-spacing: 0.3px;
         text-transform: none;
+      }
+      .theme-modern .header {
+        text-align: left;
+        margin-bottom: 8px;
+      }
+      .theme-modern .header-main {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 14px;
+        align-items: center;
+      }
+      .theme-modern .profile-photo {
+        display: block;
+        width: 88px;
+        height: 88px;
+        object-fit: cover;
+        border-radius: 50%;
+        border: 1.2px solid #d1d5db;
+      }
+      .theme-modern .header h1 {
+        margin: 0;
+        text-transform: uppercase;
+        font-size: 50px;
+        letter-spacing: 0.6px;
+        line-height: 0.95;
+        color: #374151;
+      }
+      .theme-modern .header .role {
+        color: #4ea3e3;
+        font-size: 20px;
+        font-weight: 600;
+        margin-top: 2px;
+      }
+      .theme-modern .header .contact,
+      .theme-modern .header .links {
+        color: #4b5563;
+        font-size: 12px;
+      }
+      .theme-modern .header .links a {
+        color: #4b5563;
+      }
+      .theme-modern .modern-row {
+        display: grid;
+        grid-template-columns: 118px 1fr;
+        gap: 10px;
+        border-top: 1px solid #d7dde4;
+        padding: 12px 0;
+      }
+      .theme-modern .modern-label {
+        color: #4ea3e3;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: none;
+        padding-top: 1px;
+      }
+      .theme-modern .modern-content {
+        font-size: 13px;
+        line-height: 1.46;
+        color: #374151;
+      }
+      .theme-modern .modern-content p {
+        line-height: 1.45;
+      }
+      .theme-modern .modern-content .exp-item,
+      .theme-modern .modern-content .project-item,
+      .theme-modern .modern-content .edu-item {
+        margin-top: 7px;
+      }
+      .theme-modern .modern-content .item-head,
+      .theme-modern .modern-content .edu-head {
+        gap: 6px;
+      }
+      .theme-modern .modern-content .item-title,
+      .theme-modern .modern-content .edu-title {
+        font-size: 13px;
+      }
+      .theme-modern .modern-content .item-meta,
+      .theme-modern .modern-content .edu-date,
+      .theme-modern .modern-content .edu-meta {
+        font-size: 11.4px;
+      }
+      .theme-modern .modern-content ul {
+        margin-top: 4px;
+      }
+      .theme-modern .modern-content li {
+        font-size: 12.4px;
+        margin-bottom: 2px;
+      }
+      .theme-modern .skills-grid {
+        margin-top: 5px;
+        gap: 5px;
+      }
+      .theme-modern .skill-row {
+        grid-template-columns: 175px 1fr;
+        gap: 8px;
+        font-size: 12.2px;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-row {
+        grid-template-columns: 126px 1fr;
+        gap: 12px;
+        padding: 16px 0;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-label {
+        font-size: 13.6px;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-content {
+        font-size: 14.2px;
+        line-height: 1.6;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-content p {
+        line-height: 1.6;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-content .exp-item,
+      .theme-modern .modern-layout.is-low-content .modern-content .project-item,
+      .theme-modern .modern-layout.is-low-content .modern-content .edu-item {
+        margin-top: 10px;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-content .item-title,
+      .theme-modern .modern-layout.is-low-content .modern-content .edu-title {
+        font-size: 14.8px;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-content .item-meta,
+      .theme-modern .modern-layout.is-low-content .modern-content .edu-date,
+      .theme-modern .modern-layout.is-low-content .modern-content .edu-meta {
+        font-size: 12.8px;
+      }
+      .theme-modern .modern-layout.is-low-content .modern-content li {
+        font-size: 13.8px;
+        line-height: 1.55;
+        margin-bottom: 3px;
+      }
+      .theme-modern .modern-layout.is-low-content .skill-row {
+        grid-template-columns: 200px 1fr;
+        font-size: 13.6px;
+      }
+      .theme-modern .modern-layout.is-low-content + .header,
+      .theme-modern .modern-layout.is-low-content ~ .header {
+        margin-bottom: 12px;
+      }
+      .theme-modern.modern-expanded .header {
+        margin-bottom: 10px;
+      }
+      .theme-modern.modern-expanded .profile-photo {
+        width: 96px;
+        height: 96px;
+      }
+      .theme-modern.modern-expanded .header .role {
+        font-size: 21px;
       }
       .theme-tech .header {
         text-align: left;
@@ -448,7 +852,7 @@ export function renderResumeHtml(payload: ResumePdfPayload): string {
     </style>
   </head>
   <body>
-    <main class="page ${theme.className}">
+    <main class="page ${theme.className} ${modernDensityClass}">
       ${header}
       ${body}
     </main>
