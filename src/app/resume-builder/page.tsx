@@ -22,6 +22,7 @@ import {
   Trash2,
   Upload,
   Save,
+  GripVertical,
 } from "lucide-react";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 import { RESUME_TEMPLATES, getTemplateById } from "@/lib/data/templates";
@@ -65,6 +66,41 @@ interface SkillsEntry {
   technical: string;
   soft: string;
 }
+
+type ResumeSectionKey =
+  | "summary"
+  | "education"
+  | "skills"
+  | "projects"
+  | "experience"
+  | "certificate"
+  | "awards"
+  | "publications"
+  | "affiliations";
+
+const DEFAULT_RESUME_SECTION_ORDER: ResumeSectionKey[] = [
+  "summary",
+  "education",
+  "skills",
+  "projects",
+  "experience",
+  "certificate",
+  "awards",
+  "publications",
+  "affiliations",
+];
+
+const SECTION_ORDER_LABELS: Record<ResumeSectionKey, string> = {
+  summary: "Summary",
+  education: "Education",
+  skills: "Skills",
+  projects: "Projects",
+  experience: "Experience",
+  certificate: "Certificate",
+  awards: "Awards",
+  publications: "Publications",
+  affiliations: "Affiliations",
+};
 
 const emptyEducation = (): EducationEntry => ({
   id: crypto.randomUUID(),
@@ -208,6 +244,7 @@ interface ResumeDraft {
   experiences: ExperienceEntry[];
   projects: ProjectEntry[];
   skillsEntry: SkillsEntry;
+  sectionOrder: ResumeSectionKey[];
   savedAt: number;
 }
 
@@ -245,11 +282,35 @@ export default function ResumeBuilderPage() {
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([emptyExperience()]);
   const [projects, setProjects] = useState<ProjectEntry[]>([emptyProject()]);
   const [skillsEntry, setSkillsEntry] = useState<SkillsEntry>({ technical: "", soft: "" });
+  const [sectionOrder, setSectionOrder] = useState<ResumeSectionKey[]>(DEFAULT_RESUME_SECTION_ORDER);
+  const [draggingSection, setDraggingSection] = useState<ResumeSectionKey | null>(null);
   const [jdFileName, setJdFileName] = useState<string | null>(null);
   const [jdLoading, setJdLoading] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jdFileInputRef = useRef<HTMLInputElement>(null);
+
+  const sanitizeSectionOrder = (rawOrder: unknown): ResumeSectionKey[] => {
+    const allowed = new Set<ResumeSectionKey>(DEFAULT_RESUME_SECTION_ORDER);
+    const normalized: ResumeSectionKey[] = [];
+
+    if (Array.isArray(rawOrder)) {
+      for (const item of rawOrder) {
+        if (typeof item !== "string") continue;
+        if (!allowed.has(item as ResumeSectionKey)) continue;
+        if (normalized.includes(item as ResumeSectionKey)) continue;
+        normalized.push(item as ResumeSectionKey);
+      }
+    }
+
+    for (const key of DEFAULT_RESUME_SECTION_ORDER) {
+      if (!normalized.includes(key)) {
+        normalized.push(key);
+      }
+    }
+
+    return normalized;
+  };
 
   useEffect(() => {
     try {
@@ -328,6 +389,7 @@ export default function ResumeBuilderPage() {
         setPhotoBase64(draft.photoBase64);
         setPhotoPreview(draft.photoBase64);
       }
+      setSectionOrder(sanitizeSectionOrder(draft.sectionOrder));
 
       setSaveNotice("Progress restored from saved draft.");
       const timer = setTimeout(() => setSaveNotice(""), 2500);
@@ -480,6 +542,37 @@ export default function ResumeBuilderPage() {
     if (jdFileInputRef.current) jdFileInputRef.current.value = "";
   };
 
+  const moveSection = (fromKey: ResumeSectionKey, toKey: ResumeSectionKey) => {
+    if (fromKey === toKey) return;
+    setSectionOrder((prev) => {
+      const next = [...prev];
+      const fromIndex = next.indexOf(fromKey);
+      const toIndex = next.indexOf(toKey);
+      if (fromIndex < 0 || toIndex < 0) return prev;
+      next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, fromKey);
+      return next;
+    });
+  };
+
+  const handleSectionDragStart = (key: ResumeSectionKey) => {
+    setDraggingSection(key);
+  };
+
+  const handleSectionDrop = (targetKey: ResumeSectionKey) => {
+    if (!draggingSection) return;
+    moveSection(draggingSection, targetKey);
+    setDraggingSection(null);
+  };
+
+  const handleSectionDragEnd = () => {
+    setDraggingSection(null);
+  };
+
+  const resetSectionOrder = () => {
+    setSectionOrder(DEFAULT_RESUME_SECTION_ORDER);
+  };
+
   const handleSaveProgress = () => {
     try {
       const draft: ResumeDraft = {
@@ -497,6 +590,7 @@ export default function ResumeBuilderPage() {
         experiences,
         projects,
         skillsEntry,
+        sectionOrder,
         savedAt: Date.now(),
       };
 
@@ -1171,6 +1265,7 @@ ${text}`;
           form,
           educations,
           photoBase64,
+          sectionOrder,
         }),
       });
 
@@ -1554,6 +1649,50 @@ ${fixedCode}`;
                   </button>
                 ))}
               </div>
+
+              <Card>
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold">Customize Section Order</h3>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Drag and drop sections to control generated resume order.
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" className="text-xs" onClick={resetSectionOrder}>
+                      Reset
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {sectionOrder.map((key, idx) => {
+                      const isDragging = draggingSection === key;
+                      return (
+                        <div
+                          key={key}
+                          draggable
+                          onDragStart={() => handleSectionDragStart(key)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => handleSectionDrop(key)}
+                          onDragEnd={handleSectionDragEnd}
+                          title="Drag to reorder"
+                          className={`flex items-center justify-between rounded-xl border px-3 py-2.5 transition-all duration-150 ${
+                            isDragging
+                              ? "border-primary/40 bg-primary/10"
+                              : "border-glass-border bg-surface-1 hover:bg-surface-2"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-xs font-medium">{SECTION_ORDER_LABELS[key]}</span>
+                          </div>
+                          <Badge variant="secondary" className="text-[10px]">{idx + 1}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
             </motion.div>
           )}
 

@@ -33,11 +33,35 @@ export type ResumeEducationEntry = {
   coursework: string;
 };
 
+type ResumeSectionKey =
+  | "summary"
+  | "education"
+  | "skills"
+  | "projects"
+  | "experience"
+  | "certificate"
+  | "awards"
+  | "publications"
+  | "affiliations";
+
+const DEFAULT_SECTION_ORDER: ResumeSectionKey[] = [
+  "summary",
+  "education",
+  "skills",
+  "projects",
+  "experience",
+  "certificate",
+  "awards",
+  "publications",
+  "affiliations",
+];
+
 export type ResumePdfPayload = {
   templateId: string;
   form: ResumeFormData;
   educations: ResumeEducationEntry[];
   photoBase64?: string | null;
+  sectionOrder?: ResumeSectionKey[];
 };
 
 function cleanInvisible(text: string): string {
@@ -75,6 +99,38 @@ function normalizeUrl(url: string): string {
 function joinNonEmpty(parts: string[], sep: string): string {
   const filtered = parts.filter((p) => p.trim().length > 0);
   return filtered.join(sep);
+}
+
+function normalizeSectionOrder(sectionOrder?: ResumeSectionKey[]): ResumeSectionKey[] {
+  const known = new Set<ResumeSectionKey>(DEFAULT_SECTION_ORDER);
+  const normalized: ResumeSectionKey[] = [];
+
+  if (Array.isArray(sectionOrder)) {
+    for (const key of sectionOrder) {
+      if (!known.has(key)) continue;
+      if (normalized.includes(key)) continue;
+      normalized.push(key);
+    }
+  }
+
+  for (const key of DEFAULT_SECTION_ORDER) {
+    if (!normalized.includes(key)) {
+      normalized.push(key);
+    }
+  }
+
+  return normalized;
+}
+
+function renderOrderedSections(
+  sectionOrder: ResumeSectionKey[] | undefined,
+  sectionMap: Partial<Record<ResumeSectionKey, string>>
+): string {
+  const order = normalizeSectionOrder(sectionOrder);
+  return order
+    .map((key) => sectionMap[key] || "")
+    .filter((block) => block.trim().length > 0)
+    .join("");
 }
 
 function renderSection(title: string, body: string): string {
@@ -464,44 +520,46 @@ function renderBody(payload: ResumePdfPayload, modernCompact = false): string {
     const hasExperience = experienceBody.trim().length > 0;
     const isMandatoryOnlyFillMode = !hasExperience && hasSummary && hasEducation && hasProjects && hasSkills;
 
-    const rows = [
-      row("Summary", summaryText),
-      row("Education", educationBody),
-      row("Skills", skillsBody),
-      row("Projects", projectBody),
-      row("Experience", experienceBody),
-      row("Certificate", renderBulletParagraph(certificates)),
-      row("Awards", renderBulletParagraph(awards)),
-      row("Publications", renderBulletParagraph(publications)),
-      row("Affiliations", renderBulletParagraph(affiliations)),
-    ].join("");
+    const rows = renderOrderedSections(payload.sectionOrder, {
+      summary: row("Summary", summaryText),
+      education: row("Education", educationBody),
+      skills: row("Skills", skillsBody),
+      projects: row("Projects", projectBody),
+      experience: row("Experience", experienceBody),
+      certificate: row("Certificate", renderBulletParagraph(certificates)),
+      awards: row("Awards", renderBulletParagraph(awards)),
+      publications: row("Publications", renderBulletParagraph(publications)),
+      affiliations: row("Affiliations", renderBulletParagraph(affiliations)),
+    });
 
     return `<div class="modern-layout ${modernCompact ? "is-compact" : "is-expanded"} ${isMandatoryOnlyFillMode ? "is-low-content" : ""}">${rows}</div>`;
   }
 
   if (payload.templateId === "tech-developer") {
     const declarationText = meta.declaration || "";
-    return [
-      renderSection("Career Objective", renderBulletParagraph(objectiveLines)),
-      renderSection("Education", renderEducation(educations, form.education)),
-      renderSection("Technical Skills", renderTechnicalSkills(meta.technical)),
-      renderSection("Subjects Of Interest", renderBulletParagraph(meta.subjectsOfInterest)),
-      renderSection("Experience", renderExperienceBlocks(form.experience) || renderBulletParagraph(experienceLines)),
-      renderSection("Projects", renderProjectBlocks(form.projects) || renderBulletParagraph(projectLines)),
-      renderSection("Additional Skills", renderBulletParagraph(meta.additionalSkills)),
-      renderSection("Additional Details", renderBulletParagraph(meta.additionalDetails)),
-      renderSection("Declaration", declarationText ? `<p>${escapeHtml(declarationText)}</p>` : ""),
-    ].join("");
+    const ordered = renderOrderedSections(payload.sectionOrder, {
+      summary: renderSection("Career Objective", renderBulletParagraph(objectiveLines)),
+      education: renderSection("Education", renderEducation(educations, form.education)),
+      skills: renderSection("Technical Skills", renderTechnicalSkills(meta.technical)),
+      projects: renderSection("Projects", renderProjectBlocks(form.projects) || renderBulletParagraph(projectLines)),
+      experience: renderSection("Experience", renderExperienceBlocks(form.experience) || renderBulletParagraph(experienceLines)),
+      certificate: renderSection("Additional Skills", renderBulletParagraph(meta.additionalSkills)),
+      awards: renderSection("Additional Details", renderBulletParagraph(meta.additionalDetails)),
+      affiliations: renderSection("Declaration", declarationText ? `<p>${escapeHtml(declarationText)}</p>` : ""),
+    });
+
+    const subjectBlock = renderSection("Subjects Of Interest", renderBulletParagraph(meta.subjectsOfInterest));
+    return `${ordered}${subjectBlock}`;
   }
 
-  return [
-    renderSection("Objective", renderBulletParagraph(objectiveLines)),
-    renderSection("Education", renderEducation(educations, form.education)),
-    renderSection("Skills", renderTechnicalSkills(meta.technical)),
-    renderSection("Experience", renderExperienceBlocks(form.experience) || renderBulletLines(experienceLines)),
-    renderSection("Projects", renderProjectBlocks(form.projects) || renderBulletLines(projectLines)),
-    renderSection("Extra-Curricular Activities", renderBulletLines(meta.additionalSkills)),
-  ].join("");
+  return renderOrderedSections(payload.sectionOrder, {
+    summary: renderSection("Objective", renderBulletParagraph(objectiveLines)),
+    education: renderSection("Education", renderEducation(educations, form.education)),
+    skills: renderSection("Skills", renderTechnicalSkills(meta.technical)),
+    projects: renderSection("Projects", renderProjectBlocks(form.projects) || renderBulletLines(projectLines)),
+    experience: renderSection("Experience", renderExperienceBlocks(form.experience) || renderBulletLines(experienceLines)),
+    certificate: renderSection("Extra-Curricular Activities", renderBulletLines(meta.additionalSkills)),
+  });
 }
 
 function getTheme(templateId: string): { className: string; accent: string; font: string } {
