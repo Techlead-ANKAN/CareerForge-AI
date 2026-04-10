@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   FileText,
   Wand2,
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 import { RESUME_TEMPLATES, getTemplateById } from "@/lib/data/templates";
+import { extractTextFromPdf } from "@/lib/resume/textExtraction";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,10 +63,27 @@ interface ProjectEntry {
   points: string;
 }
 
+interface SkillRatingEntry {
+  id: string;
+  name: string;
+  rating: number;
+}
+
 interface SkillsEntry {
   technical: string;
   soft: string;
+  technicalRatings: SkillRatingEntry[];
+  softRatings: SkillRatingEntry[];
 }
+
+interface TemplateHoverPreviewPosition {
+  x: number;
+  y: number;
+  placement: "top" | "bottom";
+}
+
+type SkillsEntryField = "technical" | "soft";
+type SkillRatingGroup = "technicalRatings" | "softRatings";
 
 type ResumeSectionKey =
   | "summary"
@@ -129,6 +147,12 @@ const emptyProject = (): ProjectEntry => ({
   name: "",
   link: "",
   points: "",
+});
+
+const emptySkillRating = (): SkillRatingEntry => ({
+  id: crypto.randomUUID(),
+  name: "",
+  rating: 3,
 });
 
 const gradeTypes = [
@@ -212,9 +236,19 @@ function formatProjectsToString(projects: ProjectEntry[]): string {
 }
 
 function formatSkillsToString(skills: SkillsEntry): string {
+  const joinRatedSkillNames = (entries: SkillRatingEntry[]) =>
+    entries
+      .map((entry) => entry.name.trim())
+      .filter(Boolean)
+      .join(", ");
+
   const parts: string[] = [];
-  if (skills.technical.trim()) parts.push(`Technical Skills: ${skills.technical.trim()}`);
-  if (skills.soft.trim()) parts.push(`Soft Skills: ${skills.soft.trim()}`);
+  const technicalSkills = skills.technical.trim() || joinRatedSkillNames(skills.technicalRatings);
+  const softSkills = skills.soft.trim() || joinRatedSkillNames(skills.softRatings);
+
+  if (technicalSkills) parts.push(`Technical Skills: ${technicalSkills}`);
+  if (softSkills) parts.push(`Soft Skills: ${softSkills}`);
+
   return parts.join("\n");
 }
 
@@ -267,6 +301,13 @@ const defaultForm: ResumeForm = {
   achievements: "",
 };
 
+const defaultSkillsEntry: SkillsEntry = {
+  technical: "",
+  soft: "",
+  technicalRatings: [],
+  softRatings: [],
+};
+
 export default function ResumeBuilderPage() {
   const [form, setForm] = useState<ResumeForm>(defaultForm);
   const [latexCode, setLatexCode] = useState("");
@@ -275,20 +316,72 @@ export default function ResumeBuilderPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [activeSection, setActiveSection] = useState("template");
-  const [selectedTemplate, setSelectedTemplate] = useState("faangpath-simple");
+  const [selectedTemplate, setSelectedTemplate] = useState("modern-professional");
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [educations, setEducations] = useState<EducationEntry[]>([emptyEducation()]);
   const [experiences, setExperiences] = useState<ExperienceEntry[]>([emptyExperience()]);
   const [projects, setProjects] = useState<ProjectEntry[]>([emptyProject()]);
-  const [skillsEntry, setSkillsEntry] = useState<SkillsEntry>({ technical: "", soft: "" });
+  const [skillsEntry, setSkillsEntry] = useState<SkillsEntry>(defaultSkillsEntry);
   const [sectionOrder, setSectionOrder] = useState<ResumeSectionKey[]>(DEFAULT_RESUME_SECTION_ORDER);
   const [draggingSection, setDraggingSection] = useState<ResumeSectionKey | null>(null);
   const [jdFileName, setJdFileName] = useState<string | null>(null);
   const [jdLoading, setJdLoading] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
+  const [hoverPreviewTemplateId, setHoverPreviewTemplateId] = useState<string | null>(null);
+  const [hoverPreviewPosition, setHoverPreviewPosition] = useState<TemplateHoverPreviewPosition | null>(null);
+  const [desktopHoverEnabled, setDesktopHoverEnabled] = useState(false);
+  const [templatePreviewImageErrors, setTemplatePreviewImageErrors] = useState<Record<string, boolean>>({});
+  const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jdFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const syncHoverCapability = () => {
+      setDesktopHoverEnabled(mediaQuery.matches);
+    };
+
+    syncHoverCapability();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncHoverCapability);
+      return () => mediaQuery.removeEventListener("change", syncHoverCapability);
+    }
+
+    mediaQuery.addListener(syncHoverCapability);
+    return () => mediaQuery.removeListener(syncHoverCapability);
+  }, []);
+
+  useEffect(() => {
+    if (!desktopHoverEnabled) {
+      setHoverPreviewTemplateId(null);
+      setHoverPreviewPosition(null);
+    }
+  }, [desktopHoverEnabled]);
+
+  useEffect(() => {
+    if (activeSection !== "template") {
+      setHoverPreviewTemplateId(null);
+      setHoverPreviewPosition(null);
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverOpenTimerRef.current) {
+        clearTimeout(hoverOpenTimerRef.current);
+        hoverOpenTimerRef.current = null;
+      }
+      if (hoverCloseTimerRef.current) {
+        clearTimeout(hoverCloseTimerRef.current);
+        hoverCloseTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const sanitizeSectionOrder = (rawOrder: unknown): ResumeSectionKey[] => {
     const allowed = new Set<ResumeSectionKey>(DEFAULT_RESUME_SECTION_ORDER);
@@ -310,6 +403,32 @@ export default function ResumeBuilderPage() {
     }
 
     return normalized;
+  };
+
+  const clampRating = (value: unknown): number => {
+    const parsed = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(parsed)) return 3;
+    return Math.min(5, Math.max(1, Math.round(parsed)));
+  };
+
+  const sanitizeRatingGroup = (rawGroup: unknown): SkillRatingEntry[] => {
+    if (!Array.isArray(rawGroup)) return [];
+
+    return rawGroup
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+
+        const candidate = entry as Partial<SkillRatingEntry>;
+        const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+        if (!name) return null;
+
+        return {
+          id: typeof candidate.id === "string" && candidate.id ? candidate.id : crypto.randomUUID(),
+          name,
+          rating: clampRating(candidate.rating),
+        };
+      })
+      .filter((entry): entry is SkillRatingEntry => Boolean(entry));
   };
 
   useEffect(() => {
@@ -368,9 +487,11 @@ export default function ResumeBuilderPage() {
         projects: formatProjectsToString(nextProjects),
       };
 
-      const restoredSkills = {
+      const restoredSkills: SkillsEntry = {
         technical: draft.skillsEntry?.technical || "",
         soft: draft.skillsEntry?.soft || "",
+        technicalRatings: sanitizeRatingGroup(draft.skillsEntry?.technicalRatings),
+        softRatings: sanitizeRatingGroup(draft.skillsEntry?.softRatings),
       };
       setSkillsEntry(restoredSkills);
       nextForm = {
@@ -379,7 +500,11 @@ export default function ResumeBuilderPage() {
       };
       setForm(nextForm);
 
-      if (typeof draft.selectedTemplate === "string" && draft.selectedTemplate) {
+      if (
+        typeof draft.selectedTemplate === "string" &&
+        draft.selectedTemplate &&
+        RESUME_TEMPLATES.some((template) => template.id === draft.selectedTemplate)
+      ) {
         setSelectedTemplate(draft.selectedTemplate);
       }
       if (typeof draft.activeSection === "string" && draft.activeSection) {
@@ -475,33 +600,65 @@ export default function ResumeBuilderPage() {
     });
   };
 
-  const updateSkillsEntry = (field: keyof SkillsEntry, value: string) => {
+  const syncSkillsToForm = (nextSkills: SkillsEntry) => {
+    setForm((f) => ({ ...f, skills: formatSkillsToString(nextSkills) }));
+  };
+
+  const updateSkillsEntry = (field: SkillsEntryField, value: string) => {
     setSkillsEntry((prev) => {
       const next = { ...prev, [field]: value };
-      setForm((f) => ({ ...f, skills: formatSkillsToString(next) }));
+      syncSkillsToForm(next);
       return next;
     });
   };
 
-  const extractTextFromPDF = async (file: File): Promise<string> => {
-    const pdfjsLib = await import("pdfjs-dist");
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+  const addRatedSkill = (group: SkillRatingGroup) => {
+    setSkillsEntry((prev) => {
+      const next: SkillsEntry = {
+        ...prev,
+        [group]: [...prev[group], emptySkillRating()],
+      };
+      syncSkillsToForm(next);
+      return next;
+    });
+  };
 
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const textParts: string[] = [];
+  const updateRatedSkill = (group: SkillRatingGroup, id: string, field: "name" | "rating", value: string | number) => {
+    setSkillsEntry((prev) => {
+      const nextGroup = prev[group].map((skill) => {
+        if (skill.id !== id) return skill;
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((item: any) => (item.str ? item.str : ""))
-        .join(" ");
-      textParts.push(pageText);
-    }
+        if (field === "name") {
+          return {
+            ...skill,
+            name: String(value),
+          };
+        }
 
-    return textParts.join("\n\n");
+        return {
+          ...skill,
+          rating: clampRating(value),
+        };
+      });
+
+      const next: SkillsEntry = {
+        ...prev,
+        [group]: nextGroup,
+      };
+      syncSkillsToForm(next);
+      return next;
+    });
+  };
+
+  const removeRatedSkill = (group: SkillRatingGroup, id: string) => {
+    setSkillsEntry((prev) => {
+      const next: SkillsEntry = {
+        ...prev,
+        [group]: prev[group].filter((skill) => skill.id !== id),
+      };
+      syncSkillsToForm(next);
+      return next;
+    });
   };
 
   const handleJDUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -516,7 +673,7 @@ export default function ResumeBuilderPage() {
 
     try {
       if (isPDF) {
-        const text = await extractTextFromPDF(file);
+        const text = await extractTextFromPdf(file);
         if (!text.trim()) {
           setError("Could not extract text from this PDF. It may be image-based. Try copy-pasting the text instead.");
           setJdFileName(null);
@@ -685,6 +842,23 @@ export default function ResumeBuilderPage() {
 
   const normalizeLatexForCompile = (code: string): string => {
     return stripInvisibleUnicode(code).replace(/\r\n/g, "\n");
+  };
+
+  const getErrorMessage = (value: unknown, fallback = "Unknown error"): string => {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+
+    const maybeMessage = (value as { message?: unknown } | null)?.message;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+      return maybeMessage;
+    }
+
+    if (value === undefined || value === null) {
+      return fallback;
+    }
+
+    return String(value);
   };
 
   const toItemize = (text: string): string => {
@@ -919,6 +1093,14 @@ ${achievementsSection}
       .split(/[;,|]/g)
       .map((v) => v.trim())
       .filter(Boolean);
+  };
+
+  const splitLines = (value: string): string[] => {
+    return stripInvisibleUnicode(value)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-*•]\s*/, ""));
   };
 
   const parseTechMeta = (): TechMeta => {
@@ -1244,7 +1426,7 @@ ${text}`;
 
       setLatexCode(text);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Generation failed";
+      const message = getErrorMessage(err, "Generation failed");
       setError(message);
     } finally {
       setLoading(false);
@@ -1266,6 +1448,20 @@ ${text}`;
           educations,
           photoBase64,
           sectionOrder,
+          ratedSkills: {
+            technical: skillsEntry.technicalRatings
+              .map((skill) => ({
+                name: skill.name.trim(),
+                level: Math.min(5, Math.max(1, Math.round(skill.rating))),
+              }))
+              .filter((skill) => skill.name.length > 0),
+            soft: skillsEntry.softRatings
+              .map((skill) => ({
+                name: skill.name.trim(),
+                level: Math.min(5, Math.max(1, Math.round(skill.rating))),
+              }))
+              .filter((skill) => skill.name.length > 0),
+          },
         }),
       });
 
@@ -1340,7 +1536,7 @@ ${text}`;
         URL.revokeObjectURL(htmlUrl);
         return;
       } catch (htmlErr: unknown) {
-        const htmlMessage = htmlErr instanceof Error ? htmlErr.message : String(htmlErr);
+        const htmlMessage = getErrorMessage(htmlErr, "HTML template PDF generation failed");
         setError(`HTML template PDF generation failed:\n${htmlMessage.slice(0, 320)}`);
         return;
       }
@@ -1355,7 +1551,7 @@ ${text}`;
         blob = await attemptCompile(compileBaseCode);
       } catch (firstErr: unknown) {
         // Auto-fix attempt 1: ask Gemini to fix the LaTeX errors
-        const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        const errMsg = getErrorMessage(firstErr, "PDF conversion failed");
 
         if (isCompilerUnavailable(errMsg)) {
           throw new Error(errMsg);
@@ -1391,7 +1587,7 @@ ${compileBaseCode}`;
           blob = await attemptCompile(fixedCode);
         } catch (fixErr: unknown) {
           // Auto-fix attempt 2: aggressive simplification
-          const fixMsg2 = fixErr instanceof Error ? fixErr.message : String(fixErr);
+          const fixMsg2 = getErrorMessage(fixErr, "PDF conversion failed after auto-fix");
 
           if (isQuotaError(fixMsg2)) {
             setError("Auto-fix skipped due API quota. Building a compile-safe PDF layout from your data...");
@@ -1400,7 +1596,7 @@ ${compileBaseCode}`;
             try {
               blob = await attemptCompile(fallbackLatex);
             } catch (fallbackErr: unknown) {
-              const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+              const fallbackMsg = getErrorMessage(fallbackErr, "Fallback compile failed");
               throw new Error(`Auto-fix failed due API quota: ${fixMsg2}\n\nFallback compile also failed: ${fallbackMsg}`);
             }
             const url = URL.createObjectURL(blob);
@@ -1440,7 +1636,7 @@ ${fixedCode}`;
 
             blob = await attemptCompile(fixedCode2);
           } catch (fixErr2: unknown) {
-            const fixMsg = fixErr2 instanceof Error ? fixErr2.message : "PDF conversion failed after auto-fix";
+            const fixMsg = getErrorMessage(fixErr2, "PDF conversion failed after auto-fix");
             setError("Auto-fix failed. Building a compile-safe PDF layout from your data...");
 
             const fallbackLatex = normalizeLatexForCompile(buildSafeLatexFallback());
@@ -1449,7 +1645,7 @@ ${fixedCode}`;
             try {
               blob = await attemptCompile(fallbackLatex);
             } catch (fallbackErr: unknown) {
-              const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+              const fallbackMsg = getErrorMessage(fallbackErr, "Fallback compile failed");
               throw new Error(`Auto-fix failed after 2 attempts: ${fixMsg}\n\nFallback compile also failed: ${fallbackMsg}`);
             }
           }
@@ -1463,7 +1659,7 @@ ${fixedCode}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Download failed";
+      const message = getErrorMessage(err, "Download failed");
       setError(message);
     } finally {
       setDownloading(false);
@@ -1488,9 +1684,192 @@ ${fixedCode}`;
   ];
 
   const currentTemplate = getTemplateById(selectedTemplate);
+  const hoveredTemplate =
+    desktopHoverEnabled && hoverPreviewTemplateId
+      ? RESUME_TEMPLATES.find((template) => template.id === hoverPreviewTemplateId) || null
+      : null;
   const hasName = form.fullName.trim().length > 0;
   const hasTargetRole = form.targetRole.trim().length > 0;
   const canGenerate = hasName && hasTargetRole;
+  const isCreativeTemplate = selectedTemplate === "creative-modern";
+
+  const markTemplatePreviewImageError = (templateId: string) => {
+    setTemplatePreviewImageErrors((prev) => {
+      if (prev[templateId]) return prev;
+      return { ...prev, [templateId]: true };
+    });
+  };
+
+  const getTemplatePreviewPosition = (target: HTMLElement): TemplateHoverPreviewPosition => {
+    const rect = target.getBoundingClientRect();
+    const previewWidth = Math.min(352, window.innerWidth - 32);
+    const previewHeight = 410;
+    const verticalGap = 12;
+    const viewportPadding = 12;
+    const half = previewWidth / 2;
+    const edgeGap = 16;
+
+    const centeredX = rect.left + rect.width / 2;
+    const clampedX = Math.min(window.innerWidth - edgeGap - half, Math.max(edgeGap + half, centeredX));
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const shouldRenderAbove =
+      spaceAbove >= previewHeight + verticalGap + viewportPadding ||
+      (spaceAbove > spaceBelow && spaceBelow < previewHeight);
+
+    const proposedY = shouldRenderAbove
+      ? rect.top - previewHeight - verticalGap
+      : rect.bottom + verticalGap;
+    const clampedY = Math.min(
+      window.innerHeight - previewHeight - viewportPadding,
+      Math.max(viewportPadding, proposedY)
+    );
+
+    return {
+      x: clampedX,
+      y: clampedY,
+      placement: shouldRenderAbove ? "top" : "bottom",
+    };
+  };
+
+  const showTemplatePreview = (templateId: string, target: HTMLElement, immediate = false) => {
+    if (!desktopHoverEnabled) return;
+
+    if (hoverCloseTimerRef.current) {
+      clearTimeout(hoverCloseTimerRef.current);
+      hoverCloseTimerRef.current = null;
+    }
+
+    const nextPosition = getTemplatePreviewPosition(target);
+    const apply = () => {
+      setHoverPreviewTemplateId(templateId);
+      setHoverPreviewPosition(nextPosition);
+    };
+
+    if (immediate) {
+      if (hoverOpenTimerRef.current) {
+        clearTimeout(hoverOpenTimerRef.current);
+        hoverOpenTimerRef.current = null;
+      }
+      apply();
+      return;
+    }
+
+    if (hoverOpenTimerRef.current) {
+      clearTimeout(hoverOpenTimerRef.current);
+    }
+
+    hoverOpenTimerRef.current = setTimeout(() => {
+      apply();
+      hoverOpenTimerRef.current = null;
+    }, 70);
+  };
+
+  const hideTemplatePreview = () => {
+    if (!desktopHoverEnabled) return;
+
+    if (hoverOpenTimerRef.current) {
+      clearTimeout(hoverOpenTimerRef.current);
+      hoverOpenTimerRef.current = null;
+    }
+    if (hoverCloseTimerRef.current) {
+      clearTimeout(hoverCloseTimerRef.current);
+    }
+
+    hoverCloseTimerRef.current = setTimeout(() => {
+      setHoverPreviewTemplateId(null);
+      setHoverPreviewPosition(null);
+      hoverCloseTimerRef.current = null;
+    }, 110);
+  };
+
+  const renderRatedSkillGroup = (
+    group: SkillRatingGroup,
+    title: string,
+    addButtonLabel: string,
+    fillClassName: string
+  ) => {
+    const entries = skillsEntry[group];
+
+    return (
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-muted-foreground">{title}</label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1 h-7 px-2.5 text-[11px]"
+            onClick={() => addRatedSkill(group)}
+          >
+            <Plus className="h-3.5 w-3.5" /> {addButtonLabel}
+          </Button>
+        </div>
+
+        {entries.length === 0 && (
+          <p className="text-[11px] text-muted-foreground">Add skills to render rating bars in the Creative Modern template.</p>
+        )}
+
+        <div className="space-y-2.5">
+          {entries.map((entry) => {
+            const widthClassByRating: Record<number, string> = {
+              1: "w-1/5",
+              2: "w-2/5",
+              3: "w-3/5",
+              4: "w-4/5",
+              5: "w-full",
+            };
+            const progressClass = widthClassByRating[entry.rating] || "w-3/5";
+
+            return (
+              <div key={entry.id} className="rounded-xl border border-glass-border bg-surface-1 p-3 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    placeholder="Skill name"
+                    value={entry.name}
+                    onChange={(e) => updateRatedSkill(group, entry.id, "name", e.target.value)}
+                    className="sm:flex-1"
+                  />
+
+                  <div className="flex items-center gap-1.5">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => updateRatedSkill(group, entry.id, "rating", level)}
+                        className={`h-7 w-7 rounded-md border text-[11px] font-semibold transition-all ${
+                          entry.rating >= level
+                            ? "border-primary/50 bg-primary/15 text-primary"
+                            : "border-glass-border bg-surface-2 text-muted-foreground"
+                        }`}
+                        title={`Set rating to ${level}`}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeRatedSkill(group, entry.id)}
+                    className="gap-1 h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3 w-3" /> Remove
+                  </Button>
+                </div>
+
+                <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
+                  <div className={`h-full rounded-full ${fillClassName} ${progressClass}`} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <motion.div
@@ -1614,39 +1993,115 @@ ${fixedCode}`;
                   <p className="text-xs text-muted-foreground mt-1">Select the style that best fits your target role</p>
                 </div>
               </div>
+
+              <AnimatePresence>
+                {desktopHoverEnabled && hoveredTemplate && hoverPreviewPosition && (
+                  <motion.div
+                    id="template-hover-preview"
+                    role="status"
+                    aria-live="polite"
+                    initial={{
+                      opacity: 0,
+                      scale: 0.95,
+                      y: hoverPreviewPosition.placement === "top" ? 8 : -8,
+                    }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{
+                      opacity: 0,
+                      scale: 0.96,
+                      y: hoverPreviewPosition.placement === "top" ? 6 : -6,
+                    }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    className="pointer-events-none fixed z-50 w-[min(22rem,calc(100vw-2rem))]"
+                    style={{
+                      left: hoverPreviewPosition.x,
+                      top: hoverPreviewPosition.y,
+                    }}
+                  >
+                    <div
+                      className="relative -translate-x-1/2 overflow-hidden rounded-2xl border border-white/15 bg-[#0b1020]/95 p-2 shadow-[0_18px_48px_rgba(2,6,23,0.65)] backdrop-blur-xl"
+                    >
+                      <div className="relative h-80 overflow-hidden rounded-xl border border-white/10 bg-slate-950">
+                        {hoveredTemplate.previewImageUrl && !templatePreviewImageErrors[hoveredTemplate.id] ? (
+                          <img
+                            src={hoveredTemplate.previewImageUrl}
+                            alt={hoveredTemplate.previewImageAlt || `${hoveredTemplate.name} preview`}
+                            className="h-full w-full object-contain object-top"
+                            onError={() => markTemplatePreviewImageError(hoveredTemplate.id)}
+                          />
+                        ) : (
+                          <div className={`absolute inset-0 bg-linear-to-br ${hoveredTemplate.color} flex items-center justify-center`}>
+                            <span className="text-5xl">{hoveredTemplate.preview}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-2 px-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/80">Template Preview</p>
+                        <div className="mt-1 flex items-start justify-between gap-2">
+                          <h4 className="text-xs font-semibold leading-tight text-white">{hoveredTemplate.name}</h4>
+                          <div className={`h-7 w-7 shrink-0 rounded-lg bg-linear-to-br ${hoveredTemplate.color} flex items-center justify-center text-sm shadow-lg`}>
+                            {hoveredTemplate.preview}
+                          </div>
+                        </div>
+                        <p className="mt-1 text-[11px] leading-relaxed text-slate-300">{hoveredTemplate.description}</p>
+                      </div>
+
+                      <div
+                        className={`absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 bg-[#0b1020]/95 ${
+                          hoverPreviewPosition.placement === "top"
+                            ? "-bottom-1 border-r border-b border-white/15"
+                            : "-top-1 border-l border-t border-white/15"
+                        }`}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {RESUME_TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedTemplate(t.id)}
-                    className={`group text-left p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden ${
-                      selectedTemplate === t.id
-                        ? "border-primary/40 bg-primary/10 shadow-[0_0_30px_rgba(139,92,246,0.15)] ring-1 ring-primary/20"
-                        : "border-glass-border bg-glass-bg hover:border-[rgba(139,92,246,0.2)] hover:bg-surface-3 hover:shadow-[0_0_20px_rgba(139,92,246,0.06)]"
-                    }`}
-                  >
-                    {selectedTemplate === t.id && (
-                      <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-primary/60 to-transparent" />
-                    )}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className={`h-12 w-12 rounded-xl bg-linear-to-br ${t.color} flex items-center justify-center text-xl shadow-lg`}>
-                        {t.preview}
-                      </div>
+                  <div key={t.id} className="relative">
+                    <button
+                      onClick={() => setSelectedTemplate(t.id)}
+                      onMouseEnter={(e) => showTemplatePreview(t.id, e.currentTarget)}
+                      onMouseLeave={hideTemplatePreview}
+                      onFocus={(e) => showTemplatePreview(t.id, e.currentTarget, true)}
+                      onBlur={hideTemplatePreview}
+                      aria-describedby={
+                        desktopHoverEnabled && hoverPreviewTemplateId === t.id
+                          ? "template-hover-preview"
+                          : undefined
+                      }
+                      className={`group text-left p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden w-full ${
+                        selectedTemplate === t.id
+                          ? "border-primary/40 bg-primary/10 shadow-[0_0_30px_rgba(139,92,246,0.15)] ring-1 ring-primary/20"
+                          : "border-glass-border bg-glass-bg hover:border-[rgba(139,92,246,0.2)] hover:bg-surface-3 hover:shadow-[0_0_20px_rgba(139,92,246,0.06)]"
+                      }`}
+                    >
                       {selectedTemplate === t.id && (
-                        <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center shadow-[0_0_10px_rgba(139,92,246,0.4)]">
-                          <CheckCircle className="h-3.5 w-3.5 text-white" />
+                        <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-primary/60 to-transparent" />
+                      )}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className={`h-12 w-12 rounded-xl bg-linear-to-br ${t.color} flex items-center justify-center text-xl shadow-lg`}>
+                          {t.preview}
                         </div>
-                      )}
-                    </div>
-                    <h4 className="text-sm font-semibold mb-1">{t.name}</h4>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{t.description}</p>
-                    <div className="mt-3 flex gap-2">
-                      {t.hasPhoto && (
-                        <Badge variant="secondary" className="text-[10px] px-2 py-0.5">📷 Photo</Badge>
-                      )}
-                      <Badge variant="outline" className="text-[10px] px-2 py-0.5">LaTeX</Badge>
-                    </div>
-                  </button>
+                        {selectedTemplate === t.id && (
+                          <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center shadow-[0_0_10px_rgba(139,92,246,0.4)]">
+                            <CheckCircle className="h-3.5 w-3.5 text-white" />
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="text-sm font-semibold mb-1">{t.name}</h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{t.description}</p>
+                      <div className="mt-3 flex gap-2">
+                        {t.hasPhoto && (
+                          <Badge variant="secondary" className="text-[10px] px-2 py-0.5">📷 Photo</Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] px-2 py-0.5">LaTeX</Badge>
+                      </div>
+                    </button>
+                  </div>
                 ))}
               </div>
 
@@ -2217,10 +2672,43 @@ ${fixedCode}`;
                       <Trophy className="h-5 w-5 text-primary" />
                       <span className="bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Skills & Achievements</span>
                     </h2>
-                    <p className="text-xs text-muted-foreground mt-1">Add technical and soft skills separately</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {isCreativeTemplate
+                        ? "Creative Modern supports 1-5 skill ratings with horizontal bars in the final PDF."
+                        : "Add technical and soft skills separately"}
+                    </p>
                   </div>
+
+                  {isCreativeTemplate && (
+                    <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground">Creative Skill Ratings</h3>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Use a 1-5 scale. These entries render as horizontal bars in the Creative sidebar.</p>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px] px-2 py-0.5 shrink-0">Scale 1-5</Badge>
+                      </div>
+
+                      {renderRatedSkillGroup(
+                        "technicalRatings",
+                        "Technical Ratings",
+                        "Add Skill",
+                        "bg-linear-to-r from-blue-500 to-cyan-500"
+                      )}
+
+                      {renderRatedSkillGroup(
+                        "softRatings",
+                        "Soft Skill Ratings",
+                        "Add Skill",
+                        "bg-linear-to-r from-fuchsia-500 to-rose-500"
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Technical Skills</label>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {isCreativeTemplate ? "Technical Skills (optional manual list)" : "Technical Skills"}
+                    </label>
                     <Textarea
                       placeholder="HTML, CSS, JavaScript, React, Node.js, SQL..."
                       rows={4}
@@ -2229,7 +2717,9 @@ ${fixedCode}`;
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Soft Skills</label>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {isCreativeTemplate ? "Soft Skills (optional manual list)" : "Soft Skills"}
+                    </label>
                     <Textarea
                       placeholder="Communication, Teamwork, Leadership, Problem Solving..."
                       rows={3}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Mail,
   Loader2,
@@ -10,6 +10,9 @@ import {
   FileText,
   GraduationCap,
   Briefcase,
+  Upload,
+  Save,
+  X,
 } from "lucide-react";
 import { getApiKey, generateWithRetry } from "@/lib/ai/gemini";
 import ReactMarkdown from "react-markdown";
@@ -19,8 +22,33 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  extractTextFromSupportedResumeFile,
+  getSupportedResumeFileType,
+  MAX_RESUME_FILE_SIZE_BYTES,
+  type SupportedResumeFileType,
+} from "@/lib/resume/textExtraction";
+import type { CoverLetterDraftPayload, CoverLetterPdfPayload } from "@/lib/pdf/coverLetterHtmlTemplates";
 
 type DocType = "cover-letter" | "academic-cv" | "email-intro";
+type CVFormData = {
+  name: string;
+  targetRole: string;
+  company: string;
+  jobDescription: string;
+  resumeText: string;
+  additionalInfo: string;
+};
+
+type CVGeneratorDraft = {
+  docType: DocType;
+  formData: CVFormData;
+  resumeSourceType: SupportedResumeFileType | "paste";
+  jdSourceType: SupportedResumeFileType | "paste";
+  resumeFileName: string | null;
+  jdFileName: string | null;
+  savedAt: number;
+};
 
 const docTypes: { id: DocType; label: string; icon: typeof Mail; description: string; color: string }[] = [
   {
@@ -46,16 +74,191 @@ const docTypes: { id: DocType; label: string; icon: typeof Mail; description: st
   },
 ];
 
-export default function CVGeneratorPage() {
-  const [docType, setDocType] = useState<DocType>("cover-letter");
-  const [formData, setFormData] = useState({
-    name: "",
-    targetRole: "",
-    company: "",
-    jobDescription: "",
-    resumeText: "",
-    additionalInfo: "",
+const FILE_SIZE_LIMIT_MB = Math.round(MAX_RESUME_FILE_SIZE_BYTES / (1024 * 1024));
+const CV_GENERATOR_DRAFT_STORAGE_KEY = "cv_generator_draft_v1";
+
+const defaultFormData: CVFormData = {
+  name: "",
+  targetRole: "",
+  company: "",
+  jobDescription: "",
+  resumeText: "",
+  additionalInfo: "",
+};
+
+function sourceLabel(type: SupportedResumeFileType | "paste"): string {
+  if (type === "pdf") return "PDF";
+  if (type === "docx") return "DOCX";
+  if (type === "text") return "Text File";
+  return "Pasted Text";
+}
+
+function stripCodeFence(value: string): string {
+  return value.replace(/^```(?:json|text|md|markdown)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+}
+
+function normalizeLine(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeParagraphs(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeLine(entry)).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/\n{2,}/)
+      .map((entry) => normalizeLine(entry))
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function parseJsonObject(raw: string): unknown {
+  const cleaned = stripCodeFence(raw);
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error("Invalid JSON response");
+  }
+}
+
+function buildCoverLetterPreview(draft: CoverLetterDraftPayload): string {
+  const lines: string[] = [];
+
+  if (draft.subjectLine.trim()) {
+    lines.push(`Subject: ${draft.subjectLine.trim()}`, "");
+  }
+
+  lines.push(draft.salutation.trim() || "Dear Hiring Manager,", "");
+
+  if (draft.openingParagraph.trim()) {
+    lines.push(draft.openingParagraph.trim(), "");
+  }
+
+  draft.bodyParagraphs.forEach((paragraph) => {
+    if (paragraph.trim()) {
+      lines.push(paragraph.trim(), "");
+    }
   });
+
+  draft.achievementBullets.forEach((bullet) => {
+    if (bullet.trim()) {
+      lines.push(`- ${bullet.trim()}`);
+    }
+  });
+
+  if (draft.achievementBullets.length > 0) {
+    lines.push("");
+  }
+
+  if (draft.closingParagraph.trim()) {
+    lines.push(draft.closingParagraph.trim(), "");
+  }
+
+  lines.push(draft.signOff.trim() || "Sincerely,");
+  lines.push(draft.signatureName.trim());
+
+  return lines.join("\n").trim();
+}
+
+function fallbackCoverLetterDraftFromText(text: string, formData: CVFormData): CoverLetterDraftPayload {
+  const normalized = text.replace(/\r/g, "").trim();
+  const chunks = normalized
+    .split(/\n{2,}/)
+    .map((chunk) => normalizeLine(chunk))
+    .filter(Boolean);
+
+  const opening = chunks[0]
+    || `I am writing to express my interest in the ${formData.targetRole || "position"} role at ${formData.company || "your organization"}.`;
+  const bodyParagraphs = chunks.slice(1, 3);
+  const closing = chunks[chunks.length - 1] || "Thank you for your time and consideration. I would welcome the opportunity to discuss my fit for this role.";
+
+  return {
+    subjectLine: `${formData.targetRole || "Application"} Position`,
+    salutation: "Dear Hiring Manager,",
+    openingParagraph: opening,
+    bodyParagraphs,
+    achievementBullets: [],
+    closingParagraph: closing,
+    signOff: "Sincerely,",
+    signatureName: formData.name.trim() || "Candidate",
+  };
+}
+
+function normalizeCoverLetterDraft(raw: unknown, formData: CVFormData): CoverLetterDraftPayload {
+  const payload = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+  const bodyParagraphs = normalizeParagraphs(payload.bodyParagraphs).slice(0, 2);
+  const bullets = normalizeParagraphs(payload.achievementBullets)
+    .map((entry) => entry.replace(/^[-*\u2022]\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  const draft: CoverLetterDraftPayload = {
+    subjectLine: normalizeLine(payload.subjectLine) || `${formData.targetRole || "Application"} Position`,
+    salutation: normalizeLine(payload.salutation) || "Dear Hiring Manager,",
+    openingParagraph: normalizeLine(payload.openingParagraph),
+    bodyParagraphs,
+    achievementBullets: bullets,
+    closingParagraph: normalizeLine(payload.closingParagraph),
+    signOff: normalizeLine(payload.signOff) || "Sincerely,",
+    signatureName: normalizeLine(payload.signatureName) || formData.name.trim() || "Candidate",
+  };
+
+  if (!draft.openingParagraph && draft.bodyParagraphs.length === 0) {
+    return fallbackCoverLetterDraftFromText("", formData);
+  }
+
+  if (!draft.openingParagraph && draft.bodyParagraphs.length > 0) {
+    draft.openingParagraph = draft.bodyParagraphs[0];
+    draft.bodyParagraphs = draft.bodyParagraphs.slice(1);
+  }
+
+  return draft;
+}
+
+function buildCoverLetterPdfPayload(formData: CVFormData, draft: CoverLetterDraftPayload): CoverLetterPdfPayload {
+  return {
+    form: {
+      name: formData.name.trim() || "Candidate",
+      targetRole: formData.targetRole.trim() || "Professional Role",
+      company: formData.company.trim(),
+      senderEmail: "",
+      senderPhone: "",
+      senderLocation: "",
+      senderLinkedin: "",
+      recipientName: "Hiring Manager",
+      recipientTitle: "",
+      recipientAddress: "",
+      letterDate: new Date().toISOString().slice(0, 10),
+    },
+    draft,
+  };
+}
+
+export default function CVGeneratorPage() {
+  const resumeFileInputRef = useRef<HTMLInputElement>(null);
+  const jdFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [docType, setDocType] = useState<DocType>("cover-letter");
+  const [formData, setFormData] = useState<CVFormData>(defaultFormData);
+  const [coverLetterDraft, setCoverLetterDraft] = useState<CoverLetterDraftPayload | null>(null);
+  const [resumeSourceType, setResumeSourceType] = useState<SupportedResumeFileType | "paste">("paste");
+  const [jdSourceType, setJdSourceType] = useState<SupportedResumeFileType | "paste">("paste");
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [jdFileName, setJdFileName] = useState<string | null>(null);
+  const [extractingResume, setExtractingResume] = useState(false);
+  const [extractingJD, setExtractingJD] = useState(false);
   const [generatedText, setGeneratedText] = useState("");
   const [latexCode, setLatexCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -63,9 +266,198 @@ export default function CVGeneratorPage() {
   const [copied, setCopied] = useState(false);
   const [showLatex, setShowLatex] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CV_GENERATOR_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+
+      const draft = JSON.parse(raw) as Partial<CVGeneratorDraft>;
+
+      if (draft.docType === "cover-letter" || draft.docType === "academic-cv" || draft.docType === "email-intro") {
+        setDocType(draft.docType);
+      }
+
+      if (draft.formData && typeof draft.formData === "object") {
+        const typedForm = draft.formData as Partial<CVFormData>;
+        setFormData({
+          name: typeof typedForm.name === "string" ? typedForm.name : defaultFormData.name,
+          targetRole: typeof typedForm.targetRole === "string" ? typedForm.targetRole : defaultFormData.targetRole,
+          company: typeof typedForm.company === "string" ? typedForm.company : defaultFormData.company,
+          jobDescription: typeof typedForm.jobDescription === "string" ? typedForm.jobDescription : defaultFormData.jobDescription,
+          resumeText: typeof typedForm.resumeText === "string" ? typedForm.resumeText : defaultFormData.resumeText,
+          additionalInfo: typeof typedForm.additionalInfo === "string" ? typedForm.additionalInfo : defaultFormData.additionalInfo,
+        });
+      }
+
+      if (
+        draft.resumeSourceType === "paste"
+        || draft.resumeSourceType === "pdf"
+        || draft.resumeSourceType === "docx"
+        || draft.resumeSourceType === "text"
+      ) {
+        setResumeSourceType(draft.resumeSourceType);
+      }
+
+      if (
+        draft.jdSourceType === "paste"
+        || draft.jdSourceType === "pdf"
+        || draft.jdSourceType === "docx"
+        || draft.jdSourceType === "text"
+      ) {
+        setJdSourceType(draft.jdSourceType);
+      }
+
+      if (typeof draft.resumeFileName === "string") {
+        setResumeFileName(draft.resumeFileName);
+      } else if (draft.resumeFileName === null) {
+        setResumeFileName(null);
+      }
+
+      if (typeof draft.jdFileName === "string") {
+        setJdFileName(draft.jdFileName);
+      } else if (draft.jdFileName === null) {
+        setJdFileName(null);
+      }
+
+      setSaveNotice("Progress restored from saved draft.");
+      const timer = setTimeout(() => setSaveNotice(""), 2500);
+      return () => clearTimeout(timer);
+    } catch {
+      // Ignore malformed local draft.
+    }
+  }, []);
 
   const update = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveProgress = () => {
+    try {
+      const draft: CVGeneratorDraft = {
+        docType,
+        formData,
+        resumeSourceType,
+        jdSourceType,
+        resumeFileName,
+        jdFileName,
+        savedAt: Date.now(),
+      };
+
+      localStorage.setItem(CV_GENERATOR_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      setSaveNotice("Progress saved locally. It will remain after refresh.");
+    } catch {
+      setSaveNotice("Could not save progress. Please try again.");
+    } finally {
+      setTimeout(() => setSaveNotice(""), 2500);
+    }
+  };
+
+  const clearResumeUpload = () => {
+    setResumeFileName(null);
+    setResumeSourceType("paste");
+    if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
+  };
+
+  const clearJDUpload = () => {
+    setJdFileName(null);
+    setJdSourceType("paste");
+    if (jdFileInputRef.current) jdFileInputRef.current.value = "";
+  };
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError("");
+    setExtractingResume(true);
+
+    if (file.size > MAX_RESUME_FILE_SIZE_BYTES) {
+      setError(`Resume file is too large. Please upload files up to ${FILE_SIZE_LIMIT_MB}MB.`);
+      setExtractingResume(false);
+      if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
+      return;
+    }
+
+    const supportedType = getSupportedResumeFileType(file);
+    if (!supportedType) {
+      if (file.name.toLowerCase().endsWith(".doc")) {
+        setError("Legacy .doc files are not supported. Please save the file as .docx and upload again.");
+      } else {
+        setError("Unsupported resume file type. Please upload PDF, DOCX, or text files.");
+      }
+      setExtractingResume(false);
+      if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
+      return;
+    }
+
+    try {
+      const extracted = await extractTextFromSupportedResumeFile(file);
+      if (!extracted.text.trim()) {
+        setError("Could not extract readable text from the resume file. If this is a scanned PDF, paste text manually.");
+        setResumeFileName(null);
+        if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
+        return;
+      }
+
+      setResumeFileName(file.name);
+      setResumeSourceType(extracted.type);
+      setFormData((prev) => ({ ...prev, resumeText: extracted.text.trim() }));
+    } catch {
+      setError("Failed to read resume file. Please try another file or paste text manually.");
+      setResumeFileName(null);
+      if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
+    } finally {
+      setExtractingResume(false);
+    }
+  };
+
+  const handleJDUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError("");
+    setExtractingJD(true);
+
+    if (file.size > MAX_RESUME_FILE_SIZE_BYTES) {
+      setError(`Job description file is too large. Please upload files up to ${FILE_SIZE_LIMIT_MB}MB.`);
+      setExtractingJD(false);
+      if (jdFileInputRef.current) jdFileInputRef.current.value = "";
+      return;
+    }
+
+    const supportedType = getSupportedResumeFileType(file);
+    if (!supportedType) {
+      if (file.name.toLowerCase().endsWith(".doc")) {
+        setError("Legacy .doc files are not supported. Please save the file as .docx and upload again.");
+      } else {
+        setError("Unsupported JD file type. Please upload PDF, DOCX, or text files.");
+      }
+      setExtractingJD(false);
+      if (jdFileInputRef.current) jdFileInputRef.current.value = "";
+      return;
+    }
+
+    try {
+      const extracted = await extractTextFromSupportedResumeFile(file);
+      if (!extracted.text.trim()) {
+        setError("Could not extract readable text from the JD file. If this is a scanned PDF, paste text manually.");
+        setJdFileName(null);
+        if (jdFileInputRef.current) jdFileInputRef.current.value = "";
+        return;
+      }
+
+      setJdFileName(file.name);
+      setJdSourceType(extracted.type);
+      setFormData((prev) => ({ ...prev, jobDescription: extracted.text.trim() }));
+    } catch {
+      setError("Failed to read job description file. Please try another file or paste text manually.");
+      setJdFileName(null);
+      if (jdFileInputRef.current) jdFileInputRef.current.value = "";
+    } finally {
+      setExtractingJD(false);
+    }
   };
 
   const generate = async () => {
@@ -75,37 +467,75 @@ export default function CVGeneratorPage() {
       return;
     }
 
+    if (extractingResume || extractingJD) {
+      setError("Please wait for file extraction to finish before generating.");
+      return;
+    }
+
     setLoading(true);
     setError("");
     setGeneratedText("");
     setLatexCode("");
+    setCoverLetterDraft(null);
 
     try {
       let prompt = "";
 
       if (docType === "cover-letter") {
-        prompt = `Write a professional, compelling cover letter for the following application. The letter should be well-structured, personalized, and demonstrate genuine interest and qualifications.
+        prompt = `You are a professional career writer. Draft a REAL one-page cover letter (not a resume summary dump).
 
+CRITICAL RULES:
+- Keep total length between 220 and 320 words.
+- Focus only on the top 2-3 most relevant qualifications for the target role.
+- Do NOT list every skill, project, or resume section.
+- Use concise, natural, professional business language.
+- The result MUST fit on one page in a standard professional layout.
+- Do not include placeholders like [Your Name].
+
+Return ONLY valid JSON with this exact schema (no markdown, no code blocks):
+{
+  "subjectLine": "string",
+  "salutation": "string",
+  "openingParagraph": "string (45-75 words)",
+  "bodyParagraphs": [
+    "string (45-75 words)",
+    "string (45-75 words)"
+  ],
+  "achievementBullets": ["string", "string"],
+  "closingParagraph": "string (35-60 words)",
+  "signOff": "string",
+  "signatureName": "string"
+}
+
+Use at most 2 bullet points, each short and impact-focused.
+
+APPLICATION DETAILS:
 Applicant Name: ${formData.name || "Not provided"}
 Target Role: ${formData.targetRole || "Not provided"}
 Company: ${formData.company || "Not provided"}
 ${formData.jobDescription ? `Job Description:\n${formData.jobDescription}` : ""}
 ${formData.resumeText ? `Resume/Background:\n${formData.resumeText}` : ""}
-${formData.additionalInfo ? `Additional Details:\n${formData.additionalInfo}` : ""}
+${formData.additionalInfo ? `Additional Details:\n${formData.additionalInfo}` : ""}`;
 
-Write the cover letter in a professional tone. Include:
-1. Strong opening that catches attention
-2. Body paragraphs connecting experience to the role
-3. Specific examples of relevant achievements
-4. Enthusiastic but professional closing
-5. Proper letter formatting
+        const response = await generateWithRetry(prompt);
+        const cleaned = stripCodeFence(response);
 
-Output the cover letter text first.
+        let draft: CoverLetterDraftPayload;
+        try {
+          const parsed = parseJsonObject(cleaned);
+          draft = normalizeCoverLetterDraft(parsed, formData);
+        } catch {
+          draft = fallbackCoverLetterDraftFromText(cleaned, formData);
+        }
 
-Then output a separator line: ---LATEX---
+        setCoverLetterDraft(draft);
+        setGeneratedText(buildCoverLetterPreview(draft));
+        setLatexCode("");
+        setShowLatex(false);
+        return;
+      }
 
-Then output ONLY the complete LaTeX code for this cover letter (compilable with pdflatex, using letter class or article class with proper formatting). Do not wrap in code blocks.`;
-      } else if (docType === "academic-cv") {
+      if (docType === "academic-cv") {
         prompt = `Generate a comprehensive academic CV (curriculum vitae) for the following person. Academic CVs are longer than resumes and include research, publications, teaching, and academic service.
 
 Name: ${formData.name || "Not provided"}
@@ -190,9 +620,48 @@ Output the email text only (no LaTeX needed for emails).`;
   };
 
   const downloadPDF = async () => {
-    if (!latexCode) return;
     setDownloadingPdf(true);
     setError("");
+
+    if (docType === "cover-letter") {
+      try {
+        const draft = coverLetterDraft ?? fallbackCoverLetterDraftFromText(generatedText, formData);
+        if (!draft.openingParagraph.trim() && draft.bodyParagraphs.length === 0) {
+          throw new Error("Generate a cover letter first before downloading PDF.");
+        }
+
+        const payload = buildCoverLetterPdfPayload(formData, draft);
+        const response = await fetch("/api/cover-letter-html-to-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Cover letter PDF export failed");
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "cover-letter.pdf";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Cover letter PDF download failed";
+        setError(message);
+      } finally {
+        setDownloadingPdf(false);
+      }
+      return;
+    }
+
+    if (!latexCode) {
+      setDownloadingPdf(false);
+      return;
+    }
 
     const isCompilerUnavailable = (message: string) => {
       const lower = message.toLowerCase();
@@ -247,7 +716,6 @@ ${latexCode}`;
           setError("");
           blob = await attemptCompile(fixedCode);
         } catch (fixErr: unknown) {
-          // Attempt 2: aggressive simplification
           const errMsg2 = fixErr instanceof Error ? fixErr.message : String(fixErr);
           setError("Auto-fix attempt 1 failed — trying aggressive simplification (attempt 2)...");
 
@@ -290,6 +758,16 @@ ${latexCode}`;
   };
 
   const currentDocType = docTypes.find((d) => d.id === docType)!;
+  const extractionStatus = extractingResume
+    ? "Extracting resume file..."
+    : extractingJD
+      ? "Extracting job description file..."
+      : null;
+  const stickyDescription = extractionStatus
+    ? extractionStatus
+    : docType === "cover-letter"
+      ? `Resume: ${sourceLabel(resumeSourceType)}${formData.jobDescription.trim() ? ` • JD: ${sourceLabel(jdSourceType)}` : ""}`
+      : `Resume source: ${sourceLabel(resumeSourceType)}`;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="max-w-[1440px] mx-auto">
@@ -311,7 +789,10 @@ ${latexCode}`;
         {docTypes.map((dt) => (
           <button
             key={dt.id}
-            onClick={() => setDocType(dt.id)}
+            onClick={() => {
+              setDocType(dt.id);
+              setShowLatex(false);
+            }}
             className={`flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-300 flex-1 ${
               docType === dt.id
                 ? "bg-primary/10 border border-primary/30 shadow-[0_0_20px_rgba(139,92,246,0.12)]"
@@ -379,25 +860,117 @@ ${latexCode}`;
               </div>
 
               {docType === "cover-letter" && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Job Description</label>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-medium text-muted-foreground">Job Description</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => jdFileInputRef.current?.click()}
+                        disabled={extractingJD}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-60"
+                      >
+                        {extractingJD ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Extracting...</>
+                        ) : (
+                          <><Upload className="h-3 w-3" /> Upload JD</>
+                        )}
+                      </button>
+                      <input
+                        ref={jdFileInputRef}
+                        type="file"
+                        accept=".pdf,.doc,.docx,.txt,.text,.md"
+                        onChange={handleJDUpload}
+                        className="hidden"
+                        title="Upload job description"
+                      />
+
+                      {jdFileName && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg bg-success/10 border border-success/20 text-success">
+                          {jdFileName}
+                          <button
+                            onClick={clearJDUpload}
+                            className="text-danger/70 hover:text-danger"
+                            title="Clear uploaded JD"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground">Supports PDF, DOCX, and text files up to {FILE_SIZE_LIMIT_MB}MB.</p>
+
                   <Textarea
                     placeholder="Paste the job description..."
                     rows={4}
                     value={formData.jobDescription}
-                    onChange={(e) => update("jobDescription", e.target.value)}
+                    onChange={(e) => {
+                      update("jobDescription", e.target.value);
+                      setJdSourceType("paste");
+                      setJdFileName(null);
+                      if (jdFileInputRef.current) jdFileInputRef.current.value = "";
+                    }}
                   />
+
+                  <div className="text-[11px] text-muted-foreground">Job Description source: {sourceLabel(jdSourceType)}</div>
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Resume / Background</label>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">Resume / Background</label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => resumeFileInputRef.current?.click()}
+                      disabled={extractingResume}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-60"
+                    >
+                      {extractingResume ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Extracting...</>
+                      ) : (
+                        <><Upload className="h-3 w-3" /> Upload Resume</>
+                      )}
+                    </button>
+                    <input
+                      ref={resumeFileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt,.text,.md"
+                      onChange={handleResumeUpload}
+                      className="hidden"
+                      title="Upload resume"
+                    />
+
+                    {resumeFileName && (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg bg-success/10 border border-success/20 text-success">
+                        {resumeFileName}
+                        <button
+                          onClick={clearResumeUpload}
+                          className="text-danger/70 hover:text-danger"
+                          title="Clear uploaded resume"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-muted-foreground">Supports PDF, DOCX, and text files up to {FILE_SIZE_LIMIT_MB}MB.</p>
+
                 <Textarea
                   placeholder="Paste your resume or background info (helps AI personalize the output)"
                   rows={5}
                   value={formData.resumeText}
-                  onChange={(e) => update("resumeText", e.target.value)}
+                  onChange={(e) => {
+                    update("resumeText", e.target.value);
+                    setResumeSourceType("paste");
+                    setResumeFileName(null);
+                    if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
+                  }}
                 />
+
+                <div className="text-[11px] text-muted-foreground">Resume source: {sourceLabel(resumeSourceType)}</div>
               </div>
 
               <div className="space-y-1.5">
@@ -414,6 +987,11 @@ ${latexCode}`;
 
           {/* Sticky generate bar */}
           <div className="sticky bottom-4 z-20">
+            {saveNotice && (
+              <div className="mb-2 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+                {saveNotice}
+              </div>
+            )}
             <div className="p-3 rounded-2xl border border-glass-border bg-sticky-bg backdrop-blur-xl shadow-[0_-8px_30px_var(--shadow-heavy)]">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -422,17 +1000,27 @@ ${latexCode}`;
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-semibold truncate">{currentDocType.label}</div>
-                    <div className="text-[10px] text-muted-foreground truncate">{currentDocType.description}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">{stickyDescription}</div>
                   </div>
                 </div>
                 <Button
+                  onClick={handleSaveProgress}
+                  variant="outline"
+                  className="gap-2 px-4 py-5 text-sm shrink-0"
+                  title="Save current progress locally"
+                >
+                  <Save className="h-4 w-4" /> Save Progress
+                </Button>
+                <Button
                   onClick={generate}
-                  disabled={loading}
+                  disabled={loading || extractingResume || extractingJD}
                   variant="glow"
                   className="gap-2 px-6 py-5 text-sm bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 shrink-0"
                 >
                   {loading ? (
                     <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
+                  ) : extractionStatus ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Extracting...</>
                   ) : (
                     <><FileText className="h-4 w-4" /> Generate</>
                   )}
@@ -480,7 +1068,7 @@ ${latexCode}`;
                       <Button variant="outline" size="sm" onClick={downloadText} className="gap-1.5 text-xs">
                         <Download className="h-3.5 w-3.5" /> Save
                       </Button>
-                      {latexCode && (
+                      {(docType === "cover-letter" ? Boolean(generatedText) : Boolean(latexCode)) && (
                         <Button size="sm" onClick={downloadPDF} disabled={downloadingPdf} className="gap-1.5 text-xs">
                           {downloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                           PDF
@@ -542,6 +1130,12 @@ ${latexCode}`;
                   <Button variant="outline" size="sm" onClick={downloadText} className="gap-1.5 text-xs">
                     <Download className="h-3.5 w-3.5" /> Save
                   </Button>
+                  {(docType === "cover-letter" ? Boolean(generatedText) : Boolean(latexCode)) && (
+                    <Button size="sm" onClick={downloadPDF} disabled={downloadingPdf} className="gap-1.5 text-xs">
+                      {downloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                      PDF
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="max-h-[500px] overflow-y-auto">

@@ -6,6 +6,7 @@ import {
   FileText,
   Sparkles,
   ScanSearch,
+  ShieldCheck,
   Mail,
   Mic,
   ArrowRight,
@@ -21,6 +22,7 @@ import {
   ResumePreview,
   EnhancePreview,
   ATSPreview,
+  ResumeVerifierPreview,
   CVPreview,
   InterviewPreview,
 } from "@/components/home/FeaturePreview";
@@ -166,6 +168,28 @@ export default function HomePage() {
             </BentoCard>
           </motion.div>
 
+          {/* Resume Verifier */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
+            <BentoCard href="/resume-verifier" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-indigo-500 to-sky-600 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                    <ShieldCheck className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">
+                    Resume Verifier
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Adaptive interview-style checks for resume claims
+                </p>
+                <div className="flex-1">
+                  <ResumeVerifierPreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
           {/* CV Generator */}
           <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
             <BentoCard href="/cv-generator" className="h-full">
@@ -214,7 +238,7 @@ export default function HomePage() {
           <motion.div variants={fadeUp} transition={{ duration: 0.5 }}>
             <div className="h-full rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-5 flex flex-col items-center justify-center text-center">
               <Cpu className="h-8 w-8 text-primary mb-3 opacity-60" />
-              <div className="text-3xl font-bold text-foreground mb-1">5</div>
+              <div className="text-3xl font-bold text-foreground mb-1">6</div>
               <div className="text-sm text-muted-foreground">AI-Powered Tools</div>
               <div className="text-xs text-muted-foreground mt-1">Gemini AI Engine</div>
             </div>

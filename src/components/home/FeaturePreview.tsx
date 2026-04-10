@@ -177,3 +177,40 @@ export function InterviewPreview() {
     </div>
   );
 }
+
+/* ── Resume Verifier: Mixed test signal ── */
+export function ResumeVerifierPreview() {
+  return (
+    <div className="space-y-2 p-1">
+      <div className="rounded-lg border border-glass-border bg-surface-1 p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="h-1.5 w-20 rounded-full bg-indigo-400/30" />
+          <div className="h-5 w-9 rounded-md border border-indigo-400/20 bg-indigo-400/10" />
+        </div>
+
+        <div className="grid grid-cols-3 gap-1.5">
+          <div className="rounded-md border border-glass-border bg-surface-2 h-5" />
+          <div className="rounded-md border border-glass-border bg-surface-2 h-5" />
+          <div className="rounded-md border border-glass-border bg-surface-2 h-5" />
+        </div>
+
+        <div className="rounded-md border border-glass-border bg-code-bg p-2">
+          <div className="grid grid-cols-[18px_minmax(0,1fr)] gap-2">
+            <div className="space-y-1">
+              <div className="h-1.5 rounded-full bg-surface-4" />
+              <div className="h-1.5 rounded-full bg-surface-4" />
+              <div className="h-1.5 rounded-full bg-surface-4" />
+            </div>
+            <div className="space-y-1">
+              <div className="h-1.5 w-[85%] rounded-full bg-indigo-400/25" />
+              <div className="h-1.5 w-full rounded-full bg-indigo-400/18" />
+              <div className="h-1.5 w-[70%] rounded-full bg-indigo-400/12" />
+            </div>
+          </div>
+        </div>
+
+        <div className="h-1.5 w-[62%] rounded-full bg-emerald-400/30" />
+      </div>
+    </div>
+  );
+}

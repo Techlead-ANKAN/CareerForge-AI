@@ -7,6 +7,7 @@ import {
   FileText,
   Sparkles,
   ScanSearch,
+  ShieldCheck,
   Mail,
   Mic,
   Settings,
@@ -40,6 +41,13 @@ export const featureItems = [
     icon: ScanSearch,
     description: "Score & optimize for applicant tracking",
     gradient: "from-emerald-500 to-teal-600",
+  },
+  {
+    href: "/resume-verifier",
+    label: "Resume Verifier",
+    icon: ShieldCheck,
+    description: "Interview-style resume claim validation",
+    gradient: "from-indigo-500 to-sky-600",
   },
   {
     href: "/cv-generator",

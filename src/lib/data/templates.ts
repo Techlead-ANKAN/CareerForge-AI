@@ -6,37 +6,21 @@ export interface ResumeTemplate {
   description: string;
   color: string;
   preview: string; // emoji/icon indicator
+  previewImageUrl?: string;
+  previewImageAlt?: string;
   hasPhoto: boolean;
   promptInstructions: string;
 }
 
 export const RESUME_TEMPLATES: ResumeTemplate[] = [
   {
-    id: "faangpath-simple",
-    name: "FAANGPath Simple",
-    description: "Overleaf-inspired FAANGPath layout with compact sections and clean recruiter-friendly structure",
-    color: "from-slate-500 to-slate-700",
-    preview: "📄",
-    hasPhoto: false,
-    promptInstructions: `Create a FAANGPATH SIMPLE resume that follows the classic Overleaf FAANGPath style.
-
-REQUIRED LAYOUT CONTRACT:
-- Use \\documentclass{resume} and section blocks with \\begin{rSection}{...}
-- Header style: centered uppercase name, compact contact lines below
-- Section style: thin horizontal divider with uppercase section title
-- Keep compact recruiter-friendly spacing and one-page emphasis
-- Sections should look like: OBJECTIVE, EDUCATION, SKILLS, EXPERIENCE, PROJECTS, plus optional extras only when user provides them
-- In PROJECTS, prefer concise achievement-oriented bullet lines
-- No fake placeholders; use only user-provided data
-- Omit empty sections completely
-- Keep pdflatex-compatible output`,
-  },
-  {
     id: "modern-professional",
     name: "Modern Professional",
     description: "Clean two-column design with colored sidebar, profile photo support, and modern typography",
     color: "from-blue-500 to-indigo-600",
     preview: "💼",
+    previewImageUrl: "/template-previews/modern-professional.png",
+    previewImageAlt: "Modern Professional resume preview",
     hasPhoto: true,
     promptInstructions: `Create a MODERN PROFESSIONAL resume with a polished, ATS-friendly two-column layout.
 
@@ -72,6 +56,8 @@ Design contract:
     description: "Traditional single-column. Timeless design ideal for corporate and finance roles",
     color: "from-gray-600 to-gray-800",
     preview: "🎩",
+    previewImageUrl: "/template-previews/classic-elegant.png",
+    previewImageAlt: "Classic Elegant resume preview",
     hasPhoto: false,
     promptInstructions: `Create a CLASSIC ELEGANT resume using this EXACT LaTeX structure:
 
@@ -100,6 +86,8 @@ CRITICAL DESIGN RULES:
     description: "Bold accent colors, icons, and a creative header with photo. Great for tech & design",
     color: "from-purple-500 to-pink-600",
     preview: "🎨",
+    previewImageUrl: "/template-previews/creative-modern.png",
+    previewImageAlt: "Creative Modern resume preview",
     hasPhoto: true,
     promptInstructions: `Create a CREATIVE MODERN resume using this EXACT LaTeX structure:
 
@@ -126,6 +114,8 @@ CRITICAL DESIGN RULES:
     description: "Ultra-clean, lots of whitespace. Maximum readability and ATS-friendliness",
     color: "from-emerald-500 to-teal-600",
     preview: "✨",
+    previewImageUrl: "/template-previews/minimal-clean.png",
+    previewImageAlt: "Minimal Clean resume preview",
     hasPhoto: false,
     promptInstructions: `Create a MINIMAL CLEAN resume using this EXACT LaTeX structure:
 
@@ -152,6 +142,8 @@ CRITICAL DESIGN RULES:
     description: "Designed for developers. Skill tags, project links, and code-inspired design",
     color: "from-cyan-500 to-blue-600",
     preview: "💻",
+    previewImageUrl: "/template-previews/tech-developer.png",
+    previewImageAlt: "Tech Developer resume preview",
     hasPhoto: true,
     promptInstructions: `Create a TECH DEVELOPER resume using this EXACT LaTeX structure:
 
@@ -177,6 +169,8 @@ CRITICAL DESIGN RULES:
     description: "Sophisticated two-column layout for senior roles with refined typography",
     color: "from-amber-500 to-yellow-600",
     preview: "👔",
+    previewImageUrl: "/template-previews/executive-premium.png",
+    previewImageAlt: "Executive Premium resume preview",
     hasPhoto: true,
     promptInstructions: `Create an EXECUTIVE PREMIUM resume using this EXACT LaTeX structure:
 
