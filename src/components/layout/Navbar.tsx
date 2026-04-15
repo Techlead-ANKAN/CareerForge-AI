@@ -15,7 +15,9 @@ import {
   Menu,
   ChevronDown,
   ArrowRight,
+  FolderSearch,
 } from "lucide-react";
+  
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { MobileNav } from "./MobileNav";
@@ -41,6 +43,13 @@ export const featureItems = [
     icon: ScanSearch,
     description: "Score & optimize for applicant tracking",
     gradient: "from-emerald-500 to-teal-600",
+  },
+  {
+    href: "/project-analyse",
+    label: "Project Analyse",
+    icon: FolderSearch,
+    description: "Compare your resume projects against top real-world similar projects",
+    gradient: "from-fuchsia-500 to-indigo-600",
   },
   {
     href: "/resume-verifier",
