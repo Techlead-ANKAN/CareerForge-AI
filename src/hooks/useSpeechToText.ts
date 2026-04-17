@@ -6,7 +6,13 @@ type STTState = "idle" | "listening" | "error";
 
 export function useSpeechToText() {
   const [state, setState] = useState<STTState>("idle");
+
+  // 🟡 Live (interim) text while speaking
   const [transcript, setTranscript] = useState("");
+
+  // 🟢 Final confirmed speech
+  const [finalTranscript, setFinalTranscript] = useState("");
+
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -23,32 +29,49 @@ export function useSpeechToText() {
 
     const recognition = new SpeechRecognition();
 
-    // ✅ FIXED CONFIG
-    recognition.continuous = true;        // keeps listening
-    recognition.interimResults = true;    // live updates
+    // ✅ CONFIG
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.lang = "en-US";
 
+    // 🎤 Start
     recognition.onstart = () => {
       setState("listening");
-      setTranscript(""); // reset each time mic starts
+      setTranscript("");
+      setFinalTranscript(""); // 🔥 reset each session
     };
 
+    // 🧠 Result handling (FIXED)
     recognition.onresult = (event: any) => {
-      let text = "";
+      let interim = "";
+      let final = "";
 
-      // ✅ FIXED LOOP (important)
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        text += event.results[i][0].transcript;
+        const text = event.results[i][0].transcript;
+
+        if (event.results[i].isFinal) {
+          final += text;
+        } else {
+          interim += text;
+        }
       }
 
-      setTranscript(text);
+      // 🟢 accumulate final
+      if (final) {
+        setFinalTranscript((prev) => prev + final);
+      }
+
+      // 🟡 update live text
+      setTranscript(interim);
     };
 
+    // ❌ Error
     recognition.onerror = (err: any) => {
       console.error("STT Error:", err);
       setState("error");
     };
 
+    // 🛑 End
     recognition.onend = () => {
       setState("idle");
     };
@@ -59,7 +82,7 @@ export function useSpeechToText() {
   const start = () => {
     try {
       recognitionRef.current?.start();
-    } catch (e) {
+    } catch {
       console.warn("Mic already started");
     }
   };
@@ -68,5 +91,11 @@ export function useSpeechToText() {
     recognitionRef.current?.stop();
   };
 
-  return { state, transcript, start, stop };
+  return {
+    state,
+    transcript,       // 🟡 live text
+    finalTranscript,  // 🟢 final text (USE THIS)
+    start,
+    stop,
+  };
 }
