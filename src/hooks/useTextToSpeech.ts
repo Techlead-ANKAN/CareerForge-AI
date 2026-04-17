@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export function useTextToSpeech() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false); // ✅ FIX
 
   useEffect(() => {
     const loadVoices = () => {
@@ -23,8 +23,7 @@ export function useTextToSpeech() {
   ) => {
     if (!text) return;
 
-    // 🛑 interrupt previous speech
-    speechSynthesis.cancel();
+    speechSynthesis.cancel(); // interrupt
 
     const utterance = new SpeechSynthesisUtterance(text);
 
