@@ -71,10 +71,11 @@ export default function InterviewRoomPage() {
 
     const userText = liveText;
 
-    const updatedMessages = [
-      ...messages,
-      { role: "user", content: userText },
-    ];
+    const updatedMessages: Message[] = 
+      [
+        ...messages,
+        { role: "user", content: userText },
+      ];
 
     setMessages(updatedMessages);
     setTranscript((t) => [...t, `You: ${userText}`]);
