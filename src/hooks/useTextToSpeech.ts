@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 export function useTextToSpeech() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -15,12 +16,18 @@ export function useTextToSpeech() {
     speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
 
-  const speak = (text: string, voiceName?: string, onEnd?: () => void) => {
+  const speak = (
+    text: string,
+    voiceName?: string,
+    onEnd?: () => void
+  ) => {
     if (!text) return;
+
+    // 🛑 interrupt previous speech
+    speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
 
-    // 🎭 Pick voice
     const voice =
       voices.find((v) => v.name.includes(voiceName || "")) ||
       voices[0];
@@ -30,11 +37,23 @@ export function useTextToSpeech() {
     utterance.rate = 1;
     utterance.pitch = 1;
 
+    utterance.onstart = () => setIsSpeaking(true);
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      onEnd?.();
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+    };
+
     speechSynthesis.speak(utterance);
   };
 
   const stop = () => {
     speechSynthesis.cancel();
+    setIsSpeaking(false);
   };
 
   return { speak, stop, isSpeaking, voices };
