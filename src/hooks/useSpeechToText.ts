@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
+import { useEffect, useRef, useState } from "react"; 
 type STTState = "idle" | "listening" | "error";
 
 export function useSpeechToText() {
   const [state, setState] = useState<STTState>("idle");
 
-  // 🟡 Live (interim) text while speaking
+  // Live (interim) text while speaking
   const [transcript, setTranscript] = useState("");
 
-  // 🟢 Final confirmed speech
+  // Final confirmed speech
   const [finalTranscript, setFinalTranscript] = useState("");
 
   const recognitionRef = useRef<any>(null);
@@ -29,19 +28,19 @@ export function useSpeechToText() {
 
     const recognition = new SpeechRecognition();
 
-    // ✅ CONFIG
+    // CONFIG
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
-    // 🎤 Start
+    // Start
     recognition.onstart = () => {
       setState("listening");
       setTranscript("");
-      setFinalTranscript(""); // 🔥 reset each session
+      setFinalTranscript(""); //  reset each session
     };
 
-    // 🧠 Result handling (FIXED)
+    // Result handling (FIXED)
     recognition.onresult = (event: any) => {
       let interim = "";
       let final = "";
@@ -56,22 +55,22 @@ export function useSpeechToText() {
         }
       }
 
-      // 🟢 accumulate final
+      //  accumulate final
       if (final) {
         setFinalTranscript((prev) => prev + final);
       }
 
-      // 🟡 update live text
+      //  update live text
       setTranscript(interim);
     };
 
-    // ❌ Error
+    //  Error
     recognition.onerror = (err: any) => {
       console.error("STT Error:", err);
       setState("error");
     };
 
-    // 🛑 End
+    //  End
     recognition.onend = () => {
       setState("idle");
     };
@@ -93,8 +92,8 @@ export function useSpeechToText() {
 
   return {
     state,
-    transcript,       // 🟡 live text
-    finalTranscript,  // 🟢 final text (USE THIS)
+    transcript,       //  live text
+    finalTranscript,  //  final text (USE THIS)
     start,
     stop,
   };
