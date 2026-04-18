@@ -1,0 +1,5 @@
+Polish Points:
+
+1) profile advanced description in Resume Builder
+2) in resume enhancer - output will be new pdf resume with new suggestions implemented
+3) Resume verifier - (rankning of skills upon projects and experiences -- primary level)
