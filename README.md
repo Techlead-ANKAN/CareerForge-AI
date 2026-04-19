@@ -6,44 +6,63 @@
 
 ## Features
 
-### 1. Resume Builder
-- Input your details, target role, and upload a **Job Description (PDF/TXT)**
-- Select from **6 professional LaTeX templates** (Modern Professional, Classic Elegant, Creative Modern, Minimal Clean, Tech Developer, Executive Premium)
-- Structured **education form** with GPA/CGPA/Percentage/Grade support and multiple entries
-- **Profile photo** upload with circular clipping in supported templates
-- AI generates a complete, ATS-optimized **LaTeX resume**
-- **Download as PDF** (server-side LaTeX → PDF conversion)
-- **Auto-fix**: if LaTeX compilation fails, AI automatically fixes errors (up to 2 attempts)
-- Copy LaTeX code for manual editing
+# CareerForge AI 🚀
+**The Ultimate AI-Powered Career Success Suite**
 
-### 2. AI Resume Enhancer
-- **4 enhancement levels:**
-  - **Basic Polish** — Grammar, spelling, formatting fixes
-  - **Professional Upgrade** — Action verbs, quantified achievements, ATS keywords
-  - **Executive Rewrite** — Complete professional rewrite with strategic positioning
-  - **Role-Targeted** — Tailored to a specific job description
-
-### 3. ATS Checker
-- Score your resume against job descriptions (0–100)
-- Section-by-section analysis (formatting, keywords, content quality, etc.)
-- Keyword match analysis (found vs. missing)
-- Detailed actionable feedback
-
-### 4. CV & Cover Letter Generator
-- **Cover Letter** — Professional, personalized cover letters with LaTeX + PDF export
-- **Academic CV** — Comprehensive academic curriculum vitae
-- **Networking Email** — Professional cold email introductions
-- Auto-fix on compilation failure (same as Resume Builder)
-
-### 5. Live Interview Prep
-- Real-time AI interview simulation
-- **Voice interaction** — Speak your answers via microphone, AI speaks back
-- Multiple interview types: Technical, Behavioral, System Design, HR, Custom
-- Adjustable difficulty (Easy / Medium / Hard)
-- Conversational history for natural follow-ups
+CareerForge is a comprehensive platform designed to bridge the gap between candidates and their dream roles using state-of-the-art Generative AI. From ATS-optimized LaTeX resumes to real-time 3D interview simulations, CareerForge provides every tool a modern job seeker needs.
 
 ---
 
+## 🌟 New Features & Major Upgrades
+
+### 1. 3D Live Interview Room (Upgrade)
+*Beyond chat-based prep—experience a real-time, face-to-face simulation.*
+- **Interactive 3D Avatar:** An AI-driven 3D interviewer with real-time lip-syncing and facial expressions.
+- **Voice-to-Voice Interaction:** Hands-free interview experience using high-accuracy Speech-to-Text (STT) and low-latency Text-to-Speech (TTS).
+- **Behavioral & Technical Depth:** AI personas adapt to your target role (Technical, System Design, HR, or Behavioral).
+- **Real-Time Feedback:** Get instant analysis on your verbal responses and confidence.
+
+### 2. Job Market Analyser
+*Data-driven insights for the Indian tech ecosystem.*
+- **Market Benchmarking:** Scans real-time job data (via Adzuna) to provide salary ranges (LPA) for specific roles in top Indian tech hubs (Bangalore, Pune, Kolkata, etc.).
+- **Compatibility Scoring:** Compares your current resume against market trends to give you a "Match Score."
+- **Skill-Gap Strategy:** Identifies "Critical" vs "Nice-to-have" missing skills required to reach the higher end of the salary bracket.
+- **Interview Cheat-Sheets:** Generates role-specific questions based on current market demands.
+
+### 3. Project Verifier & Analysis
+*Turn your projects into your strongest proof of work.*
+- **Real-World Comparison:** Compares your personal projects against verified open-source benchmarks and real-world industry standards.
+- **Complexity Assessment:** Analyzes your tech stack, architecture, and feature depth to see how "Industry Ready" your projects are.
+- **Optimization Suggestions:** AI-driven advice on how to improve project READMEs, add missing professional features, and scale your code.
+
+---
+
+## 🛠️ Core Features
+
+### 1. Resume Builder
+- **LaTeX Engine:** Select from 6 professional templates (Modern, Classic, Tech, Executive, etc.).
+- **JD-Targeted:** AI generates ATS-optimized content specifically tailored to a provided Job Description.
+- **Auto-Fix Logic:** Robust server-side LaTeX compilation with 2-stage AI error correction.
+- **Profile Integration:** Support for circular-clipped profile photos and structured education/GPA forms.
+
+### 2. AI Resume Enhancer
+- **Multi-Level Polish:** Choose from Basic Polish, Professional Upgrade, Executive Rewrite, or Role-Targeted tailoring.
+- **Quantified Achievements:** Automatically transforms vague duties into bullet points with measurable impact.
+
+### 3. ATS Checker
+- **Score Analysis:** Detailed 0–100 scoring based on formatting, keyword density, and content quality.
+- **Keyword Mapping:** Visual breakdown of "Found" vs. "Missing" keywords from the Job Description.
+
+### 4. CV & Cover Letter Generator
+- **Personalized Cover Letters:** High-conversion letters exported via LaTeX.
+- **Academic CVs:** Specialized templates for research and academic applications.
+- **Networking Emails:** Professional cold-outreach templates for LinkedIn and Email.
+
+---
+
+
+## 📄 License
+Distributed under the MIT License. See `LICENSE` for more information.
 ## Tech Stack
 
 | Category | Technology |
@@ -136,6 +155,13 @@ kpsewhich tikz.sty            # Should return a path
 1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
 2. Create a new API key (free tier available)
 3. You'll enter this key in the app's **Settings** page after setup
+
+---
+
+### 4. Set up Environment Variables
+   - `ADZUNA_APP_ID`
+   - `ADZUNA_APP_KEY`
+You can get these by registering in Adzuna official site
 
 ---
 
