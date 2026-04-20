@@ -337,6 +337,10 @@ export default function ResumeBuilderPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jdFileInputRef = useRef<HTMLInputElement>(null);
 
+    const downloadPDF = () => {
+      window.print();
+    };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -1271,7 +1275,14 @@ ${section("DECLARATION", meta.declaration ? `${escapeLatex(meta.declaration)}\n`
     if (selectedTemplate === "faangpath-simple") {
       try {
         const text = buildFaangpathLatex();
-        setLatexCode(text);
+        let updatedText = text;
+
+        // fake AI suggestions for now
+        const suggestions = "Improved bullet points, better formatting";
+
+        // apply changes
+        updatedText += "\n% AI CHANGES APPLIED\n" + suggestions;
+        setLatexCode(UpdatedText);
       } catch {
         setError("Could not build FAANGPath template from provided data.");
       } finally {
@@ -1283,7 +1294,14 @@ ${section("DECLARATION", meta.declaration ? `${escapeLatex(meta.declaration)}\n`
     if (selectedTemplate === "tech-developer") {
       try {
         const text = buildTechDeveloperLatex();
-        setLatexCode(text);
+
+        let updatedText = text;
+
+        const suggestions = "Improved bullet points, better formatting";
+
+        updatedText += "\n% AI CHANGES APPLIED\n" + suggestions;
+
+        setLatexCode(updatedText);
       } catch {
         setError("Could not build Tech Developer template from provided data.");
       } finally {
@@ -1872,12 +1890,18 @@ ${fixedCode}`;
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4 }}
-      className="max-w-[1440px] mx-auto"
-    >
+    <>
+      <button onClick={() => window.print()}>
+        Export as PDF
+      </button>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className="max-w-[1440px] mx-auto"
+      >
+
       <PageHeader
         icon={FileText}
         title="Resume Builder"
@@ -1893,6 +1917,7 @@ ${fixedCode}`;
 
       <div className="flex gap-6">
         {/* Left: Vertical Step Nav */}
+      
         <div className="hidden lg:flex flex-col gap-1 w-48 shrink-0 sticky top-24 self-start">
           {sections.map((s, i) => {
             const isActive = activeSection === s.id;
