@@ -479,6 +479,24 @@ export default function InterviewRoomClient() {
     tick();
   }, []);
 
+  // ── Camera toggle ──
+  const toggleCamera = useCallback(async () => {
+    if (!isCameraOn) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        streamRef.current = stream;
+        setIsCameraOn(true);
+      } catch {
+        setError("Camera access denied");
+      }
+    } else {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setIsCameraOn(false);
+    }
+  }, [isCameraOn]);
+
   // ── Speak helper — speaks text as persona[speakerIdx] ──
   // Only uses speechSynthesis directly — the useTextToSpeech speak() call was removed
   // because it queued a second competing utterance that broke boundary events.
@@ -509,6 +527,8 @@ You are opening a ${config.type} interview for the role of "${config.role || "So
 Generate a natural, professional opening statement and first question appropriate for your role and style.
 Keep it to 2-3 sentences. Be specific to the role and interview type. Do NOT say "certainly" or "sure".
 
+IMPORTANT: The first question MUST be simple and easy — a basic conceptual question the candidate can answer confidently to warm up (e.g. "What is X?", "Can you explain Y in simple terms?"). Do NOT ask a complex or coding question as the opener.
+
 Respond with just the spoken text, nothing else.`;
 
     generateWithFallback(prompt)
@@ -525,24 +545,6 @@ Respond with just the spoken text, nothing else.`;
         setTranscriptLines([`${firstPersona.name}: ${fallback}`]);
       });
   }, [personasReady, personas, config, speakAs]);
-
-  // ── Camera toggle ──
-  const toggleCamera = useCallback(async () => {
-    if (!isCameraOn) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        streamRef.current = stream;
-        setIsCameraOn(true);
-      } catch {
-        setError("Camera access denied");
-      }
-    } else {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = null;
-      setIsCameraOn(false);
-    }
-  }, [isCameraOn]);
 
   // ── Handle candidate message — Gemini decides next speaker + generates response ──
   const handleUserMessage = useCallback(async (userText: string) => {
@@ -578,6 +580,9 @@ Respond with just the spoken text, nothing else.`;
       })
       .join("\n");
 
+    const lastSpeakerIdx = updatedMessages.filter(m => m.role === "assistant").slice(-1)[0]?.speakerIndex ?? -1;
+    const nextInRotation = (lastSpeakerIdx + 1) % interviewerCount;
+
     const prompt = `You are coordinating a ${config.type} interview panel for the role of "${config.role || "Software Engineer"}".${resumeContext}
 
 The interview panel consists of:
@@ -586,18 +591,21 @@ ${personaDescriptions}
 Conversation so far:
 ${history}
 
-Based on the candidate's last response and the interview flow, decide:
-1. Which interviewer should speak next (choose the one whose expertise is most relevant to follow up)
-2. What that interviewer should say — one follow-up question or comment in their specific style
+The last interviewer who spoke was index ${lastSpeakerIdx}. The next interviewer in rotation is index ${nextInRotation}.
+
+Your task:
+1. DEFAULT: Follow round-robin rotation — the next speaker should be index ${nextInRotation}.
+2. EXCEPTION: Override rotation ONLY if the candidate's answer strongly demands a specific interviewer's expertise. This should happen at most 1 in 4 turns.
+3. Generate what that interviewer should say — one question in their specific style.
 
 Rules:
-- Pick the interviewer whose ROLE is most relevant to the candidate's answer
-- If the candidate mentioned technical details → prefer the technical interviewer
-- If the candidate mentioned teamwork/culture → prefer the HR interviewer  
-- If the candidate mentioned product/strategy → prefer the product/engineering manager
+- Follow round-robin by default — interviewers should take turns evenly
+- Only skip rotation if there is a compelling topical reason
 - Ask ONE focused question, 2-3 sentences max
 - Do NOT repeat previous questions
 - Stay in character as the chosen interviewer
+- Question type: mostly short-answer theoretical/conceptual (definitions, trade-offs, how things work). Only ask a live coding question occasionally (~1 in 5). Prefer descriptive over "write code now".
+- Difficulty progression: start easy (basic definitions, simple concepts), gradually increase depth as the conversation progresses. Look at how many exchanges have happened — early on stay surface-level, later rounds can probe deeper or explore edge cases.
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
@@ -847,18 +855,21 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
           </div>
 
           <div style={{ padding: "12px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: "8px" }}>
-            <input
+            <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && textInput.trim() && !isThinking) {
+                if (e.key === "Enter" && e.shiftKey && textInput.trim() && !isThinking) {
+                  e.preventDefault();
                   handleUserMessage(textInput);
                   setTextInput("");
                 }
+                // plain Enter = new line (default textarea behavior)
               }}
-              placeholder="Type a response..."
+              placeholder={"Type a response...\nShift+Enter to send"}
               disabled={isThinking}
-              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1 }}
+              rows={2}
+              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1, resize: "none", lineHeight: "1.5" }}
             />
             <button
               onClick={() => { if (textInput.trim() && !isThinking) { handleUserMessage(textInput); setTextInput(""); } }}
