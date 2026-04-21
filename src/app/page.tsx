@@ -1,7 +1,5 @@
 "use client";
 
-
-
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -29,6 +27,8 @@ import {
   ResumeVerifierPreview,
   CVPreview,
   InterviewPreview,
+  ProjectAnalysePreview,
+  JobAnalysePreview,
 } from "@/components/home/FeaturePreview";
 
 const fadeUp = {
@@ -39,11 +39,14 @@ const fadeUp = {
 export default function HomePage() {
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-      {/* ── Hero Section ── */}
+      {/* ── Hero ── */}
       <section className="relative pt-16 pb-20 text-center">
-        <div 
+        <div
           className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] pointer-events-none opacity-40"
-          style={{ background: "radial-gradient(ellipse, rgba(139,92,246,0.15), transparent 70%)" }}
+          style={{
+            background:
+              "radial-gradient(ellipse, rgba(139,92,246,0.15), transparent 70%)",
+          }}
         />
 
         <motion.div
@@ -69,8 +72,8 @@ export default function HomePage() {
           </h1>
 
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            Generate stunning resumes, ace interviews, and optimize for ATS — all powered by advanced AI.
-            Your complete career toolkit in one place.
+            Generate stunning resumes, ace interviews, and optimize for ATS —
+            all powered by advanced AI. Your complete career toolkit in one place.
           </p>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 justify-center">
@@ -86,7 +89,22 @@ export default function HomePage() {
         </motion.div>
       </section>
 
-      {/* ── Bento Grid Section ── */}
+      {/* ── Bento Grid ── */}
+      {/*
+        Layout (3-col, 4-row on lg):
+        ┌──────────────────────┬──────────┐
+        │  Resume Builder      │ AI       │  row 1
+        │  (col-span-2)        │ Enhance  │
+        ├──────────┬───────────┼──────────┤
+        │ Resume   │ CV/Cover  │ ATS      │  row 2
+        │ Verifier │           │ Checker  │
+        ├──────────┼───────────┼──────────┤
+        │ Project  │ Job       │ Interview│  row 3
+        │ Analyse  │ Analyse   │ Prep     │
+        ├──────────┼───────────┼──────────┤
+        │  (empty) │ Stat Card │ (empty)  │  row 4
+        └──────────┴───────────┴──────────┘
+      */}
       <motion.section
         initial="hidden"
         whileInView="visible"
@@ -94,9 +112,14 @@ export default function HomePage() {
         transition={{ staggerChildren: 0.08 }}
         className="pb-20"
       >
-        <BentoGrid className="lg:grid-rows-3">
-          {/* Resume Builder */}
-          <motion.div variants={fadeUp} className="sm:col-span-2 lg:row-span-2">
+        <BentoGrid className="lg:grid-cols-3 lg:grid-rows-4">
+
+          {/* ── Row 1: Resume Builder — col-span-2 ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="sm:col-span-2 lg:col-span-2 lg:col-start-1 lg:row-start-1"
+          >
             <BentoCard href="/resume-builder" className="h-full">
               <div className="p-6 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-4">
@@ -108,7 +131,9 @@ export default function HomePage() {
                       <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
                         Resume Builder
                       </h3>
-                      <p className="text-xs text-muted-foreground">LaTeX-powered professional resumes</p>
+                      <p className="text-xs text-muted-foreground">
+                        LaTeX-powered professional resumes
+                      </p>
                     </div>
                   </div>
                   <span className="text-xs font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20">
@@ -118,12 +143,19 @@ export default function HomePage() {
                 <div className="flex-1 mt-2">
                   <ResumePreview />
                 </div>
+                <div className="mt-4 flex items-center gap-1 text-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Build your resume <ArrowRight className="h-3.5 w-3.5" />
+                </div>
               </div>
             </BentoCard>
           </motion.div>
 
-          {/* AI Enhance */}
-          <motion.div variants={fadeUp}>
+          {/* ── Row 1: AI Enhance — col 3 ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-3 lg:row-start-1"
+          >
             <BentoCard href="/ai-enhance" className="h-full">
               <div className="p-5 h-full flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
@@ -131,10 +163,12 @@ export default function HomePage() {
                     <Sparkles className="h-4 w-4 text-white" />
                   </div>
                   <h3 className="text-sm font-semibold text-foreground group-hover:text-amber-400 transition-colors">
-                    AI Enhance
+                    AI Enhancer
                   </h3>
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">Multi-level AI improvements from grammar to rewrites</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Multi-level AI improvements from basic grammar to complete rewrites
+                </p>
                 <div className="flex-1">
                   <EnhancePreview />
                 </div>
@@ -142,11 +176,67 @@ export default function HomePage() {
             </BentoCard>
           </motion.div>
 
-          {/* ATS Checker */}
-          <motion.div variants={fadeUp}>
+          {/* ── Row 2: Resume Verifier ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-1 lg:row-start-2"
+          >
+            <BentoCard href="/resume-verifier" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-indigo-500 to-sky-600 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                    <ShieldCheck className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">
+                    Resume Verifier
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Adaptive interview-style checks for resume claims
+                </p>
+                <div className="flex-1">
+                  <ResumeVerifierPreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* ── Row 2: CV / Cover Letter ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-2 lg:row-start-2"
+          >
+            <BentoCard href="/cv-generator" className="h-full">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-cyan-500 to-blue-600 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+                    <Mail className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground group-hover:text-cyan-400 transition-colors">
+                    CV / Cover Letter Generator
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Tailored cover letters &amp; academic CVs
+                </p>
+                <div className="flex-1">
+                  <CVPreview />
+                </div>
+              </div>
+            </BentoCard>
+          </motion.div>
+
+          {/* ── Row 2: ATS Checker ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-3 lg:row-start-2"
+          >
             <BentoCard href="/ats-checker" className="h-full">
-              <div className="p-5 h-full flex flex-col items-center text-center">
-                <div className="flex items-center gap-3 mb-3 self-start text-left">
+              <div className="p-5 h-full flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-emerald-500 to-teal-600 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                     <ScanSearch className="h-4 w-4 text-white" />
                   </div>
@@ -157,13 +247,19 @@ export default function HomePage() {
                 <div className="flex-1 flex items-center justify-center">
                   <ATSPreview />
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">Score and optimize for tracking systems</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Score and optimize for ATS systems
+                </p>
               </div>
             </BentoCard>
           </motion.div>
 
-          {/* Project Analyser */}
-          <motion.div variants={fadeUp}>
+          {/* ── Row 3: Project Analyser ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-1 lg:row-start-3"
+          >
             <BentoCard href="/project-analyse" className="h-full">
               <div className="p-5 h-full flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
@@ -174,13 +270,22 @@ export default function HomePage() {
                     Project Analyse
                   </h3>
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">AI-powered analysis of project strength and uniqueness</p>
+                <p className="text-xs text-muted-foreground mb-3"> {/* Added mb-3 for spacing */}
+                  AI-powered analysis of strength and uniqueness of your projects
+                </p>
+                <div className="flex-1"> {/* Wrapped preview in flex-1 to match others */}
+                  <ProjectAnalysePreview />
+                </div>
               </div>
             </BentoCard>
           </motion.div>
 
-          {/* Job Analyser */}
-          <motion.div variants={fadeUp}>
+          {/* ── Row 3: Job Analyse ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-2 lg:row-start-3"
+          >
             <BentoCard href="/job-analyse" className="h-full">
               <div className="p-5 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-3">
@@ -212,54 +317,19 @@ export default function HomePage() {
                     <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                       <div className="h-full bg-linear-to-r from-blue-600 to-indigo-400 w-[75%]" />
                     </div>
+                    <JobAnalysePreview />
                   </div>
                 </div>
               </div>
             </BentoCard>
           </motion.div>
 
-          {/* Resume Verifier */}
-          <motion.div variants={fadeUp}>
-            <BentoCard href="/resume-verifier" className="h-full">
-              <div className="p-5 h-full flex flex-col">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-indigo-500 to-sky-600 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
-                    <ShieldCheck className="h-4 w-4 text-white" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">
-                    Resume Verifier
-                  </h3>
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">Adaptive interview-style checks for resume claims</p>
-                <div className="flex-1">
-                  <ResumeVerifierPreview />
-                </div>
-              </div>
-            </BentoCard>
-          </motion.div>
-
-          {/* CV Generator */}
-          <motion.div variants={fadeUp}>
-            <BentoCard href="/cv-generator" className="h-full">
-              <div className="p-5 h-full flex flex-col">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-cyan-500 to-blue-600 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-                    <Mail className="h-4 w-4 text-white" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-foreground group-hover:text-cyan-400 transition-colors">
-                    CV / Cover Letter
-                  </h3>
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">Tailored cover letters & academic CVs</p>
-                <div className="flex-1">
-                  <CVPreview />
-                </div>
-              </div>
-            </BentoCard>
-          </motion.div>
-
-          {/* Interview Prep */}
-          <motion.div variants={fadeUp}>
+          {/* ── Row 3: Interview Prep ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-3 lg:row-start-3"
+          >
             <BentoCard href="/interview-prep" className="h-full">
               <div className="p-5 h-full flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
@@ -270,13 +340,30 @@ export default function HomePage() {
                     Interview Prep
                   </h3>
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">Live AI interview with voice interaction</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Live AI interview with voice interaction
+                </p>
                 <div className="flex-1">
                   <InterviewPreview />
                 </div>
               </div>
             </BentoCard>
           </motion.div>
+
+          {/* ── Row 4: Stat card — col 2 (centre) ── */}
+          <motion.div
+            variants={fadeUp}
+            transition={{ duration: 0.5 }}
+            className="lg:col-start-2 lg:row-start-4"
+          >
+            <div className="h-full rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-5 flex flex-col items-center justify-center text-center">
+              <Cpu className="h-8 w-8 text-primary mb-3 opacity-60" />
+              <div className="text-3xl font-bold text-foreground mb-1">8</div>
+              <div className="text-sm text-muted-foreground">AI-Powered Tools</div>
+              <div className="text-xs text-muted-foreground mt-1">Gemini AI Engine</div>
+            </div>
+          </motion.div>
+
         </BentoGrid>
       </motion.section>
 
@@ -319,7 +406,16 @@ export default function HomePage() {
       >
         <div className="relative overflow-hidden rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-md p-10 text-center">
           <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary/40 to-transparent" />
-          <h2 className="relative text-2xl font-bold mb-3 sm:text-3xl">Ready to get started?</h2>
+          <div
+            className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[200px] pointer-events-none opacity-30"
+            style={{
+              background:
+                "radial-gradient(ellipse, rgba(139,92,246,0.2), transparent 70%)",
+            }}
+          />
+          <h2 className="relative text-2xl font-bold mb-3 sm:text-3xl">
+            Ready to get started?
+          </h2>
           <p className="relative text-muted-foreground mb-6 max-w-md mx-auto">
             Configure your API key and start building professional career materials with AI.
           </p>
@@ -337,4 +433,4 @@ export default function HomePage() {
       </motion.section>
     </div>
   );
-      }
+}
