@@ -479,19 +479,6 @@ export default function InterviewRoomClient() {
     tick();
   }, []);
 
-  // ── Speak helper — speaks text as persona[speakerIdx] ──
-  // Only uses speechSynthesis directly — the useTextToSpeech speak() call was removed
-  // because it queued a second competing utterance that broke boundary events.
-  const speakAs = useCallback((speakerIdx: number, text: string) => {
-    speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    // Must be set BEFORE startLipSync so the boundary handler can be attached to it
-    (window as unknown as Record<string, unknown>).__currentUtterance = utter;
-    startLipSync(speakerIdx, text);
-    // Small defer so cancel() has fully flushed before enqueueing the new utterance
-    setTimeout(() => speechSynthesis.speak(utter), 50);
-  }, [startLipSync]);
-
   // ── Generate opening question from Gemini once personas are ready ──
   useEffect(() => {
     if (!personasReady || interviewStarted.current) return;
@@ -543,6 +530,18 @@ Respond with just the spoken text, nothing else.`;
       setIsCameraOn(false);
     }
   }, [isCameraOn]);
+
+  // ── Speak helper — speaks text as persona[speakerIdx] ──
+  // Defined BEFORE handleUserMessage so the closure captures the real function reference.
+  const speakAs = useCallback((speakerIdx: number, text: string) => {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    // Must be set BEFORE startLipSync so the boundary handler can be attached to it
+    (window as unknown as Record<string, unknown>).__currentUtterance = utter;
+    startLipSync(speakerIdx, text);
+    // Small defer so cancel() has fully flushed before enqueueing the new utterance
+    setTimeout(() => speechSynthesis.speak(utter), 50);
+  }, [startLipSync]);
 
   // ── Handle candidate message — Gemini decides next speaker + generates response ──
   const handleUserMessage = useCallback(async (userText: string) => {
@@ -847,18 +846,21 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
           </div>
 
           <div style={{ padding: "12px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: "8px" }}>
-            <input
+            <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && textInput.trim() && !isThinking) {
+                if (e.key === "Enter" && e.shiftKey && textInput.trim() && !isThinking) {
+                  e.preventDefault();
                   handleUserMessage(textInput);
                   setTextInput("");
                 }
+                // plain Enter = new line (default textarea behavior)
               }}
-              placeholder="Type a response..."
+              placeholder={"Type a response...\nShift+Enter to send"}
               disabled={isThinking}
-              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1 }}
+              rows={2}
+              style={{ flex: 1, padding: "9px 12px", borderRadius: "10px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", outline: "none", fontFamily: "'Syne', sans-serif", opacity: isThinking ? 0.5 : 1, resize: "none", lineHeight: "1.5" }}
             />
             <button
               onClick={() => { if (textInput.trim() && !isThinking) { handleUserMessage(textInput); setTextInput(""); } }}
