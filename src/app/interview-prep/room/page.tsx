@@ -1,6 +1,8 @@
 "use client";
 
+
 import dynamic from "next/dynamic";
+
 
 // Three.js / R3F must never run on the server — dynamic import with ssr:false
 const InterviewRoomClient = dynamic(() => import("./InterviewRoomClient"), {
