@@ -939,7 +939,6 @@ ${section("Achievements", achievementsBody)}
 
   const buildFaangpathLatex = (): string => {
     const fullName = escapeLatex(form.fullName.trim() || "Candidate");
-    const role = escapeLatex(form.targetRole.trim() || "Professional");
 
     const phone = form.phone.trim();
     const location = form.location.trim();
@@ -973,7 +972,7 @@ ${section("Achievements", achievementsBody)}
 
     const objectiveText = form.summary.trim()
       ? escapeLatex(form.summary.trim())
-      : `${role} focused candidate seeking relevant opportunities.`;
+      : `Seeking relevant opportunities to contribute technical expertise and growth.`;
 
     const educationEntries = educations.filter((e) => e.degree.trim() || e.institution.trim());
     const educationSection = educationEntries.length > 0
@@ -1174,7 +1173,7 @@ ${achievementsSection}
       ].join("\n");
     };
 
-    const objectiveText = form.summary.trim() || `${form.targetRole || "Professional"} candidate seeking suitable opportunities.`;
+    const objectiveText = form.summary.trim() || "Seeking suitable opportunities to apply technical skills and contribute effectively.";
     const educationBody = form.education.trim() ? bullet(splitLines(form.education)) : "";
     const technicalBody = meta.technical.length
       ? meta.technical
@@ -1264,8 +1263,8 @@ ${section("DECLARATION", meta.declaration ? `${escapeLatex(meta.declaration)}\n`
   };
 
   const generateResume = async () => {
-    if (!form.fullName || !form.targetRole) {
-      setError("Please fill in at least your name and target role.");
+    if (!form.fullName) {
+      setError("Please fill in at least your full name.");
       return;
     }
 
