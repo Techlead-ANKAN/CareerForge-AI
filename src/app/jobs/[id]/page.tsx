@@ -111,7 +111,10 @@ function ResumeViewer({ app, onClose }: { app: ApplicantRow; onClose: () => void
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            title="Close"
+            aria-label="Close"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
           >
             <X className="h-4 w-4" />

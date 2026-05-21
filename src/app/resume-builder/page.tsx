@@ -337,9 +337,9 @@ export default function ResumeBuilderPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jdFileInputRef = useRef<HTMLInputElement>(null);
 
-    const downloadPDF = () => {
-      window.print();
-    };
+    // const downloadPDF = () => {
+    //   window.print();
+    // };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1282,7 +1282,7 @@ ${section("DECLARATION", meta.declaration ? `${escapeLatex(meta.declaration)}\n`
 
         // apply changes
         updatedText += "\n% AI CHANGES APPLIED\n" + suggestions;
-        setLatexCode(UpdatedText);
+        setLatexCode(updatedText);
       } catch {
         setError("Could not build FAANGPath template from provided data.");
       } finally {
@@ -2871,5 +2871,6 @@ ${fixedCode}`;
         </motion.div>
       ) : null}
     </motion.div>
+    </>
   );
 }
