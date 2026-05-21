@@ -1,5 +1,6 @@
 "use client";
 
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
@@ -16,11 +17,15 @@ import {
   ChevronDown,
   ArrowRight,
   FolderSearch,
+<<<<<<< HEAD
   Briefcase,
   LogOut,
   LogIn,
   UserPlus,
   PlusCircle,
+=======
+  Radar,
+>>>>>>> 1dd467ef7675ee42075f24cdf7af37880d0ff964
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -56,6 +61,13 @@ export const featureItems = [
     icon: FolderSearch,
     description: "Compare your resume projects against top real-world similar projects",
     gradient: "from-fuchsia-500 to-indigo-600",
+  },
+  {
+    href: "/job-analyse",
+    label: "Job Analyse",
+    icon: Radar,
+    description: "Real-time Indian market salary & skill analysis",
+    gradient: "from-blue-500 to-cyan-600",
   },
   {
     href: "/resume-verifier",

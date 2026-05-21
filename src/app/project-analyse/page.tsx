@@ -1,7 +1,7 @@
 "use client";
 
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   FolderSearch,
   Loader2,
@@ -54,11 +54,11 @@ interface ComparisonResult {
   similarProjects: SimilarProject[];
   comparisons: {
     resumeProjectName: string;
-    matchedSimilarProject: string;
+    matchedSimilarProjects: string[];   // 1vN — list of matched project names
     uniquenessScore: number;
     scopeComparison: string;
-    featureOverlap: string[];
-    differentiators: string[];
+    featureOverlap: string[];           // parts already covered by any similar project
+    differentiators: string[];          // what makes the resume project unique vs all of them
     suggestions: string[];
     verdict: "strong" | "competitive" | "needs-work";
   }[];
@@ -187,6 +187,257 @@ export default function ProjectAnalyzerPage() {
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loadingStep, setLoadingStep] = useState("");
 
+  // ── Puter.js CDN loader ──
+  // Never remove the script on cleanup — puter registers "puter-dialog" as a custom element
+  // once globally. Re-injecting causes customElements.define() to throw NotSupportedError.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).puter) return;
+    if (document.querySelector('script[src="https://js.puter.com/v2/"]')) return;
+    const s = document.createElement("script");
+    s.src = "https://js.puter.com/v2/";
+    s.async = true;
+    document.head.appendChild(s);
+  }, []);
+
+  // ── Puter chat helper ──
+  const puterChat = async (prompt: string): Promise<string> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const puter = (window as any).puter;
+    if (!puter?.ai?.chat) throw new Error("Puter not available. Please wait a moment and try again.");
+    const res = await puter.ai.chat(prompt, { model: "gpt-4o-mini" });
+    if (typeof res === "string") return res;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (res as any)?.message?.content ?? (res as any)?.text ?? JSON.stringify(res);
+  };
+
+  // ── GitHub Search API helper (used ONLY in the puter path) ──
+  // Step 1: Puter generates an optimal, intent-aware GitHub search query for the project.
+  // Step 2: Fetch up to 5 repos from GitHub using that query.
+  // Step 3: Puter picks the top ≤3 genuinely relevant repos (1 is fine if others don't fit).
+  const searchGitHubRepos = async (
+    project: ResumeProject
+  ): Promise<SimilarProject[]> => {
+    // ── Step 1: Ask puter to generate the optimal GitHub search query ──
+    const queryGenPrompt = `You are a GitHub search expert. Given this resume project, produce the single best GitHub repository search query that would find the most similar real-world projects.
+
+Project name: ${project.name}
+Description: ${project.description}
+Tech stack: ${project.techStack.join(", ")}
+
+Rules:
+- Output ONLY the raw search query string (no surrounding quotes, no explanation, no markdown)
+- Capture the project's core intent and domain, not just its tech keywords
+- Prefer domain-specific terms (e.g. "resume parser nlp" beats "python text processing")
+- Max 8 words
+- Do NOT use GitHub search operators like "language:" or "stars:"`;
+
+    let githubQuery: string;
+    try {
+      githubQuery = (await puterChat(queryGenPrompt)).trim().replace(/^["']|["']$/g, "");
+    } catch {
+      // Fallback to mechanical query if puter fails for this sub-call
+      const descWords = project.description.split(/\s+/).filter((w) => w.length > 4).slice(0, 3).join(" ");
+      githubQuery = `${project.techStack.slice(0, 2).join(" ")} ${descWords}`.trim();
+    }
+
+    // ── Step 2: Fetch up to 5 repos from GitHub ──
+    const res = await fetch(
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(githubQuery)}&sort=stars&order=desc&per_page=5`,
+      { headers: { Accept: "application/vnd.github+json" } }
+    );
+    if (!res.ok) return [];
+
+    const data = await res.json() as {
+      items: {
+        name: string;
+        html_url: string;
+        description: string | null;
+        stargazers_count: number;
+        forks_count: number;
+        topics: string[];
+        language: string | null;
+      }[];
+    };
+
+    const fetchedRepos: SimilarProject[] = (data.items || []).map((item) => ({
+      name: item.name,
+      url: item.html_url,
+      description: item.description || "No description available",
+      stars: formatCount(item.stargazers_count),
+      forks: formatCount(item.forks_count),
+      techStack: [
+        ...(item.language ? [item.language] : []),
+        ...item.topics.slice(0, 4),
+      ],
+    }));
+
+    if (fetchedRepos.length === 0) return [];
+
+    // ── Step 3: Puter picks the top ≤3 genuinely relevant repos ──
+    const repoListText = fetchedRepos
+      .map((r, i) => `${i + 1}. ${r.name} — ${r.description} (Tech: ${r.techStack.join(", ")})`)
+      .join("\n");
+
+    const filterPrompt = `You are reviewing GitHub repos to find the most relevant matches for a resume project.
+
+Resume project:
+Name: ${project.name}
+Description: ${project.description}
+Tech stack: ${project.techStack.join(", ")}
+
+Candidate GitHub repos fetched from search:
+${repoListText}
+
+Task: Select at most 3 repos that are genuinely similar in purpose/domain to the resume project. Return fewer if most aren't truly related — even just 1 is fine. Only include repos with clear conceptual overlap; skip repos that only share a language or a vague keyword.
+
+Respond ONLY with a JSON array of 1-based index numbers, e.g. [1, 3] — no explanation, no markdown.`;
+
+    // null = parse failed (fallback to top result); number[] = puter's explicit selection (may be empty)
+    let selectedIndices: number[] | null = null;
+    try {
+      const filterRaw = (await puterChat(filterPrompt))
+        .trim()
+        .replace(/^```(?:json)?\s*\n?/i, "")
+        .replace(/\n?```\s*$/i, "")
+        .trim();
+      const parsed = JSON.parse(filterRaw);
+      if (Array.isArray(parsed)) {
+        // Respect puter's choice — including an empty array meaning "none are relevant"
+        selectedIndices = (parsed as unknown[])
+          .filter((n): n is number => typeof n === "number" && n >= 1 && n <= fetchedRepos.length)
+          .slice(0, 3);
+      }
+    } catch {
+      selectedIndices = null; // parse error — fall back to top result
+    }
+
+    // If puter explicitly returned [] (no relevant repos), return empty.
+    // If parse failed (null), fall back to the top-ranked result as a safe default.
+    if (selectedIndices === null) selectedIndices = [1];
+    return selectedIndices.map((i) => fetchedRepos[i - 1]).filter(Boolean);
+  };
+
+  // ── Full puter-based analysis pipeline ──
+  // Replaces Gemini's grounded flow when no API key is present.
+  //   Step A — extract projects via puter (same prompt as Gemini Step 1)
+  //   Step B — search real GitHub repos per project via GitHub Search API
+  //   Step C — pass real repo data + resume projects to puter for comparison
+  //             (same JSON shape as Gemini's output so the rest of the UI is unchanged)
+  const runWithPuter = async (resumeTextVal: string): Promise<ComparisonResult> => {
+    // ── Step A: Extract projects from resume ──
+    const extractPrompt = `Extract all projects from this resume. For each project return its name, a brief description, and the tech stack used.
+
+RESUME:
+${resumeTextVal}
+
+Respond ONLY in this JSON format (no markdown, no code blocks):
+{
+  "projects": [
+    {
+      "name": "Project Name",
+      "description": "Brief description of what it does",
+      "techStack": ["tech1", "tech2"]
+    }
+  ]
+}`;
+
+    let extractRaw = (await puterChat(extractPrompt)).trim();
+    extractRaw = extractRaw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    const extractedData = JSON.parse(extractRaw) as { projects: ResumeProject[] };
+    const resumeProjects = extractedData.projects || [];
+
+    if (resumeProjects.length === 0) {
+      throw new Error("No projects found in your resume. Make sure your resume includes a Projects section.");
+    }
+
+    // ── Step B: Fetch real GitHub repos for each project via puter-generated queries ──
+    // searchGitHubRepos now runs 3 internal puter calls per project (query gen → fetch → filter),
+    // so we run projects sequentially to stay within GitHub's unauthenticated rate limit.
+    setLoadingStep(`Found ${resumeProjects.length} project(s). Searching over the internet for similar work...`);
+    const githubResultsPerProject: SimilarProject[][] = [];
+    for (const p of resumeProjects) {
+      githubResultsPerProject.push(await searchGitHubRepos(p));
+    }
+
+    // Flatten to a deduplicated list of similar projects
+    const seen = new Set<string>();
+    const allSimilarProjects: SimilarProject[] = [];
+    for (const results of githubResultsPerProject) {
+      for (const proj of results) {
+        if (!seen.has(proj.url)) {
+          seen.add(proj.url);
+          allSimilarProjects.push(proj);
+        }
+      }
+    }
+
+    // ── Step C: Ask puter to compare resume projects against the real GitHub repos ──
+    setLoadingStep("Comparing your projects with real-world GitHub repos...");
+    // We inject the real repo data directly into the prompt so puter cannot hallucinate URLs.
+    const projectListText = resumeProjects
+      .map((p, i) => `${i + 1}. ${p.name}: ${p.description} (Tech: ${p.techStack.join(", ")})`)
+      .join("\n");
+
+    const githubContext = allSimilarProjects
+      .map((p, i) =>
+        `${i + 1}. ${p.name} (${p.url})\n   Description: ${p.description}\n   Stars: ${p.stars} | Forks: ${p.forks}\n   Tech: ${p.techStack.join(", ")}`
+      )
+      .join("\n\n");
+
+    const comparePrompt = `You are a senior software engineer reviewing a candidate's resume projects.
+Below are the candidate's resume projects and REAL GitHub repositories (fetched live) that are similar.
+Use ONLY the provided GitHub repos — do NOT invent or add any others.
+
+RESUME PROJECTS:
+${projectListText}
+
+REAL GITHUB REPOS (use these exactly, do not modify URLs):
+${githubContext}
+
+For EACH resume project produce ONE comparison card that covers ALL the relevant GitHub repos together (1vN).
+- "matchedSimilarProjects": list the names of ALL GitHub repos that are genuinely relevant to this resume project ([] if none)
+- "featureOverlap": features/capabilities already covered by ANY of the matched repos combined
+- "differentiators": what makes the resume project unique compared to ALL of the matched repos together
+- "scopeComparison": one sentence comparing the resume project's scope against the matched repos as a group
+- "suggestions": actionable tips to strengthen the resume project given what already exists
+
+Respond ONLY in this JSON format (no markdown, no code blocks):
+{
+  "comparisons": [
+    {
+      "resumeProjectName": "Name from resume",
+      "matchedSimilarProjects": ["Name of relevant GitHub repo 1", "Name of relevant GitHub repo 2"],
+      "uniquenessScore": <0-100>,
+      "scopeComparison": "One sentence comparing the resume project scope vs the group of matched repos",
+      "featureOverlap": ["feature already present in any of the similar repos"],
+      "differentiators": ["what makes the resume project unique vs all matched repos combined"],
+      "suggestions": ["actionable suggestion to strengthen the project on a resume"],
+      "verdict": "strong | competitive | needs-work"
+    }
+  ],
+  "overallSummary": "2-3 sentence overall assessment of the candidate's projects vs real-world standards"
+}
+
+Uniqueness score guide:
+- 80-100: Highly unique with strong differentiators
+- 50-79: Competitive but similar to existing tools
+- 0-49: Very common, needs more differentiation`;
+
+    let compareRaw = (await puterChat(comparePrompt)).trim();
+    compareRaw = compareRaw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    const compareData = JSON.parse(compareRaw) as { comparisons: ComparisonResult["comparisons"]; overallSummary: string };
+
+    // Always use the full allSimilarProjects list — never let puter silently drop repos
+    return {
+      resumeProjects,
+      similarProjects: allSimilarProjects,
+      comparisons: compareData.comparisons || [],
+      overallSummary: compareData.overallSummary || "",
+    };
+  };
+
   const clearUpload = () => {
     setResumeFileName(null);
     setResumeSourceType("paste");
@@ -237,8 +488,11 @@ export default function ProjectAnalyzerPage() {
 
   const analyze = async () => {
     const key = getApiKey();
-    if (!key) {
-      setError("Please configure your Gemini API key in Settings first.");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const puterReady = typeof window !== "undefined" && !!(window as any).puter?.ai?.chat;
+
+    if (!key && !puterReady) {
+      setError("AI is still loading. Please wait a moment and try again, or configure a Gemini API key in Settings.");
       return;
     }
     if (!resumeText.trim()) {
@@ -250,6 +504,37 @@ export default function ProjectAnalyzerPage() {
     setError("");
     setResult(null);
 
+    // ── Puter path: no Gemini key — use GitHub Search API + puter ──
+    if (!key) {
+      try {
+        setLoadingStep("Extracting projects from your resume...");
+        const puterResult = await runWithPuter(resumeText);
+
+        // Run URL validation on puter results too (same Step 3 as Gemini path)
+        setLoadingStep("Validating URLs and fetching real GitHub stats...");
+        const validatedProjects = await validateAllProjects(puterResult.similarProjects);
+        const validNames = new Set(validatedProjects.map((p) => p.name));
+        const validatedComparisons = puterResult.comparisons.map((comp) => {
+          return { ...comp, matchedSimilarProjects: (comp.matchedSimilarProjects || []).filter((n) => validNames.has(n)) };
+        });
+
+        setResult({
+          resumeProjects: puterResult.resumeProjects,
+          similarProjects: validatedProjects,
+          comparisons: validatedComparisons,
+          overallSummary: puterResult.overallSummary,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
+        setError(message);
+      } finally {
+        setLoading(false);
+        setLoadingStep("");
+      }
+      return; // done — do not fall through to Gemini path
+    }
+
+    // ── Gemini path (untouched): has API key — use Google Search grounding ──
     try {
       // Step 1: Extract projects from resume (no grounding needed)
       setLoadingStep("Extracting projects from your resume...");
@@ -293,13 +578,20 @@ Resume projects:
 ${projectListText}
 
 STRICT RULES — you MUST follow all of these:
+- For each resume project find at most 3 highly related real projects — fewer is fine (even 1) if more aren't genuinely relevant
 - Only include projects with a REAL, WORKING URL you found via search (GitHub repo, official site, npm, PyPI, etc.)
 - NEVER fabricate, guess, or construct a URL — only use URLs you actually found in live search results
 - NEVER include entries with placeholder names like "(example)", "(generic)", "(commercial)", "(sample)", or any vague category names
-- If you cannot find a real verifiable match for a resume project, set "matchedSimilarProject" to null for that comparison — do NOT invent a fake one
+- If you cannot find a real verifiable match for a resume project, use an empty array for "matchedSimilarProjects" — do NOT invent fake ones
 - For GitHub URLs: use the exact full URL (e.g. https://github.com/owner/repo)
 - For non-GitHub projects: use the real verified homepage URL (official site, npm, PyPI, etc.)
 - Star/fork counts: provide your best estimate from search results for GitHub repos; for non-GitHub set to "N/A"
+
+For EACH resume project produce ONE comparison card covering ALL matched similar projects together (1vN):
+- "matchedSimilarProjects": names of ALL similar projects that are genuinely relevant ([] if none found)
+- "featureOverlap": features already present in ANY of the matched projects combined
+- "differentiators": what makes the resume project unique vs ALL matched projects together
+- "scopeComparison": one sentence comparing the resume project's scope against the matched projects as a group
 
 Respond ONLY in this JSON format (no markdown, no code blocks):
 {
@@ -316,11 +608,11 @@ Respond ONLY in this JSON format (no markdown, no code blocks):
   "comparisons": [
     {
       "resumeProjectName": "Name from resume",
-      "matchedSimilarProject": "Name of best real match found, or null if none",
+      "matchedSimilarProjects": ["Name of real match 1", "Name of real match 2"],
       "uniquenessScore": <0-100>,
-      "scopeComparison": "One sentence comparing the scope of both projects",
-      "featureOverlap": ["shared feature 1", "shared feature 2"],
-      "differentiators": ["what makes the resume project unique"],
+      "scopeComparison": "One sentence comparing the resume project scope vs the group of matched projects",
+      "featureOverlap": ["feature already present in any of the similar projects"],
+      "differentiators": ["what makes the resume project unique vs all matched projects combined"],
       "suggestions": ["actionable suggestion to strengthen the project on a resume"],
       "verdict": "strong | competitive | needs-work"
     }
@@ -351,13 +643,11 @@ Uniqueness score guide:
       // Build set of validated project names for cross-referencing comparisons
       const validNames = new Set(validatedProjects.map((p) => p.name));
 
-      // Update comparisons: if matched project didn't survive validation, mark it clearly
-      const validatedComparisons = (compareData.comparisons || []).map((comp) => {
-        if (!comp.matchedSimilarProject || !validNames.has(comp.matchedSimilarProject)) {
-          return { ...comp, matchedSimilarProject: "No verified match found" };
-        }
-        return comp;
-      });
+      // Update comparisons: filter matchedSimilarProjects to only those that survived URL validation
+      const validatedComparisons = (compareData.comparisons || []).map((comp) => ({
+        ...comp,
+        matchedSimilarProjects: (comp.matchedSimilarProjects || []).filter((n: string) => validNames.has(n)),
+      }));
 
       setResult({
         resumeProjects,
@@ -366,8 +656,30 @@ Uniqueness score guide:
         overallSummary: compareData.overallSummary || "",
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
-      setError(message);
+      // Gemini failed (quota exceeded, 429, network) — silently fall through to puter path
+      console.warn("[ProjectAnalyzer] Gemini failed, falling back to puter + GitHub Search:", err);
+      try {
+        setLoadingStep("Extracting projects from your resume...");
+        const puterResult = await runWithPuter(resumeText);
+
+        setLoadingStep("Validating URLs and fetching real GitHub stats...");
+        const validatedProjects = await validateAllProjects(puterResult.similarProjects);
+        const validNames = new Set(validatedProjects.map((p) => p.name));
+        const validatedComparisons = puterResult.comparisons.map((comp) => {
+          return { ...comp, matchedSimilarProjects: (comp.matchedSimilarProjects || []).filter((n) => validNames.has(n)) };
+        });
+
+        setResult({
+          resumeProjects: puterResult.resumeProjects,
+          similarProjects: validatedProjects,
+          comparisons: validatedComparisons,
+          overallSummary: puterResult.overallSummary,
+        });
+      } catch (puterErr: unknown) {
+        // Both Gemini and puter failed — only now show an error
+        const message = puterErr instanceof Error ? puterErr.message : "Analysis failed. Please try again.";
+        setError(message);
+      }
     } finally {
       setLoading(false);
       setLoadingStep("");
@@ -580,9 +892,19 @@ Uniqueness score guide:
                   <Card key={i} className="border-glass-border/80 bg-surface-1/95">
                     <CardContent className="p-5 space-y-4">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
+                        <div className="min-w-0">
                           <h3 className="text-sm font-semibold">{comp.resumeProjectName}</h3>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">vs. {comp.matchedSimilarProject}</p>
+                          {comp.matchedSimilarProjects && comp.matchedSimilarProjects.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {comp.matchedSimilarProjects.map((name, mi) => (
+                                <span key={mi} className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-surface-3/60 border border-glass-border rounded-md px-1.5 py-0.5">
+                                  vs. {name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">No verified match found</p>
+                          )}
                         </div>
                         <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium ${verdictConfig.bg} ${verdictConfig.color}`}>
                           {verdictConfig.icon}
