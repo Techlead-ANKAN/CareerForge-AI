@@ -17,15 +17,12 @@ import {
   ChevronDown,
   ArrowRight,
   FolderSearch,
-<<<<<<< HEAD
   Briefcase,
   LogOut,
   LogIn,
   UserPlus,
   PlusCircle,
-=======
   Radar,
->>>>>>> 1dd467ef7675ee42075f24cdf7af37880d0ff964
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
