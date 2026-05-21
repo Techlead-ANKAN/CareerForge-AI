@@ -39,16 +39,10 @@
     "react-dom": "19.2.3",
     "react-icons": "^5.5.0",
     "react-markdown": "^10.1.0",
-<<<<<<< HEAD
-    "tailwind-merge": "^3.5.0"
-=======
     "tailwind-merge": "^3.5.0",
-    "jspdf": "^2.5.1",
-    "html2canvas": "^1.4.1",
     "three": "^0.174.0",
     "@react-three/fiber": "^9.0.0-rc.0",
     "@react-three/drei": "^10.0.0"
->>>>>>> 1dd467ef7675ee42075f24cdf7af37880d0ff964
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
