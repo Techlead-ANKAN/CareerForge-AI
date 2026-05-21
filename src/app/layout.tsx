@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
+import { AuthProvider } from "@/components/shared/AuthProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,6 +36,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <AuthProvider>
           <div className="relative flex min-h-screen flex-col">
             {/* Dot grid background */}
             <div className="dot-grid-bg fixed inset-0 pointer-events-none z-0" />
@@ -49,6 +51,7 @@ export default function RootLayout({
               {children}
             </main>
           </div>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

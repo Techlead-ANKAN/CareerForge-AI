@@ -1,0 +1,368 @@
+erDiagram
+  RESUME_TEMPLATE {
+    string template_id PK
+    string name
+    string description
+    string color
+    boolean has_photo
+    string preview_image_url
+  }
+
+  RESUME {
+    string resume_id PK
+    string template_id FK
+
+    
+    string photo_base64
+    string section_order
+  }
+
+  RESUME_FORM {
+    string resume_id PK, FK
+    string full_name
+    string email
+    string phone
+    string location
+    string linkedin
+    string github
+    string target_role
+    string job_description
+    string summary
+    string education_text
+    string experience_text
+    string projects_text
+    string skills_text
+    string achievements_text
+  }
+
+  RESUME_EDUCATION {
+    string education_id PK
+    string resume_id FK
+    string degree
+    string field_of_study
+    string institution
+    string start_year
+    string end_year
+    string grade_type
+    string grade_value
+    string grade_scale
+    string coursework
+  }
+
+  RESUME_RATED_SKILL {
+    string skill_id PK
+    string resume_id FK
+    string category
+    string name
+    int level
+  }
+
+  COVER_LETTER {
+    string cover_letter_id PK
+  }
+
+  COVER_LETTER_FORM {
+    string cover_letter_id PK, FK
+    string name
+    string target_role
+    string company
+    string sender_email
+    string sender_phone
+    string sender_location
+    string sender_linkedin
+    string recipient_name
+    string recipient_title
+    string recipient_address
+    string letter_date
+  }
+
+  COVER_LETTER_DRAFT {
+    string cover_letter_id PK, FK
+    string subject_line
+    string salutation
+    string opening_paragraph
+    string closing_paragraph
+    string sign_off
+    string signature_name
+  }
+
+  COVER_LETTER_PARAGRAPH {
+    string paragraph_id PK
+    string cover_letter_id FK
+    int order_index
+    string text
+  }
+
+  COVER_LETTER_BULLET {
+    string bullet_id PK
+    string cover_letter_id FK
+    int order_index
+    string text
+  }
+
+  COVER_LETTER_PDF {
+    string cover_letter_id PK, FK
+    string signature_image_base64
+  }
+
+  INTERVIEW_PERSONA {
+    string persona_id PK
+    string name
+    string role
+    string style
+  }
+
+  INTERVIEW_SESSION {
+    string session_id PK
+    string interview_type
+    string target_role
+    string custom_topic
+    string difficulty
+    boolean voice_enabled
+  }
+
+  INTERVIEW_MESSAGE {
+    string message_id PK
+    string session_id FK
+    string role
+    string content
+    string timestamp
+  }
+
+  ATS_CHECKER_DRAFT {
+    string draft_id PK
+    string resume_text
+    string job_description
+    string resume_source_type
+    string jd_source_type
+    string resume_file_name
+    string jd_file_name
+    string target_role
+    string analysis_depth
+    int saved_at
+  }
+
+  ATS_RESULT {
+    string result_id PK
+    string draft_id FK
+    int overall_score
+    string detailed_feedback
+    string ai_summary
+  }
+
+  ATS_SECTION_SCORE {
+    string section_id PK
+    string result_id FK
+    string name
+    int score
+    string status
+    string feedback
+  }
+
+  ATS_KEYWORD {
+    string keyword_id PK
+    string result_id FK
+    string kind
+    string keyword
+  }
+
+  AI_ENHANCE_DRAFT {
+    string draft_id PK
+    string resume_text
+    string target_role
+    string selected_level
+    string input_type
+    string uploaded_file_name
+    int saved_at
+  }
+
+  DETECTED_SECTION {
+    string detected_id PK
+    string draft_id FK
+    string section
+    string content
+  }
+
+  ENHANCEMENT_RESULT {
+    string result_id PK
+    string draft_id FK
+    string summary
+  }
+
+  ENHANCED_SECTION {
+    string section_id PK
+    string result_id FK
+    string section
+    string original
+    string polished
+  }
+
+  ENHANCED_CHANGE {
+    string change_id PK
+    string section_id FK
+    string change_text
+  }
+
+  EXAM_SESSION {
+    string attempt_id PK
+    string mode
+    string resume_text
+    string role_context
+    int created_at
+    boolean is_exam_started
+    int active_question_index
+    int remaining_seconds
+    boolean is_disqualified
+    boolean camera_permission_granted
+    int updated_at
+  }
+
+  GENERATED_TEST {
+    string test_id PK
+    string attempt_id FK
+    string candidate_band
+    string candidate_summary
+    string exam_title
+    int duration_minutes
+    string random_seed
+    string generated_at
+    string skills_list
+    string tools_list
+    string projects_list
+    int experience_years
+    string highlights_list
+  }
+
+  VERIFICATION_QUESTION {
+    string question_id PK
+    string test_id FK
+    string type
+    string section
+    string difficulty
+    string prompt
+    int time_hint_minutes
+  }
+
+  VERIFICATION_OPTION {
+    string option_id PK
+    string question_id FK
+    string option_text
+  }
+
+  ANSWER_STATE {
+    string answer_id PK
+    string attempt_id FK
+    string question_id FK
+    string text
+    int selected_option_index
+    string code_language
+  }
+
+  TEST_VIOLATION {
+    string violation_id PK
+    string attempt_id FK
+    string type
+    string severity
+    string message
+    int timestamp
+  }
+
+  INTEGRITY_SESSION {
+    string integrity_session_id PK
+    string attempt_id FK
+    string token
+    int issued_at
+    int expires_at
+  }
+
+  INTEGRITY_RECEIPT {
+    string receipt_id PK
+    string integrity_session_id FK
+    string attempt_id
+    string status
+    string answers_digest
+    string violation_digest
+    string report_digest
+    int violation_count
+    int total_incidents
+    int client_submitted_at
+    int server_timestamp
+    string signature
+  }
+
+  VERIFICATION_REPORT {
+    string report_id PK
+    string attempt_id FK
+    int overall_score
+    string summary
+    string candidate_band
+    string integrity_notes
+  }
+
+  SECTION_SCORE {
+    string report_section_id PK
+    string report_id FK
+    string name
+    int score
+    string status
+    string feedback
+  }
+
+  QUESTION_EVALUATION {
+    string evaluation_id PK
+    string report_id FK
+    string question_id FK
+    int score
+    int max_score
+    string feedback
+  }
+
+  EVALUATION_NOTE {
+    string note_id PK
+    string evaluation_id FK
+    string kind
+    string text
+  }
+
+  GEMINI_SETTINGS {
+    string settings_id PK
+    string api_key
+    string model
+  }
+
+  RESUME_TEMPLATE ||--o{ RESUME : uses
+  RESUME ||--|| RESUME_FORM : has
+  RESUME ||--o{ RESUME_EDUCATION : includes
+  RESUME ||--o{ RESUME_RATED_SKILL : rates
+
+  COVER_LETTER ||--|| COVER_LETTER_FORM : has
+  COVER_LETTER ||--|| COVER_LETTER_DRAFT : has
+  COVER_LETTER ||--o{ COVER_LETTER_PARAGRAPH : body
+  COVER_LETTER ||--o{ COVER_LETTER_BULLET : bullets
+  COVER_LETTER ||--o| COVER_LETTER_PDF : exports
+
+  INTERVIEW_PERSONA ||--o{ INTERVIEW_SESSION : guides
+  INTERVIEW_SESSION ||--o{ INTERVIEW_MESSAGE : contains
+
+  ATS_CHECKER_DRAFT ||--o{ ATS_RESULT : produces
+  ATS_RESULT ||--o{ ATS_SECTION_SCORE : breaks_down
+  ATS_RESULT ||--o{ ATS_KEYWORD : keywords
+
+  AI_ENHANCE_DRAFT ||--o{ DETECTED_SECTION : detects
+  AI_ENHANCE_DRAFT ||--o{ ENHANCEMENT_RESULT : produces
+  ENHANCEMENT_RESULT ||--o{ ENHANCED_SECTION : improves
+  ENHANCED_SECTION ||--o{ ENHANCED_CHANGE : changes
+
+  EXAM_SESSION ||--|| GENERATED_TEST : generates
+  GENERATED_TEST ||--o{ VERIFICATION_QUESTION : includes
+  VERIFICATION_QUESTION ||--o{ VERIFICATION_OPTION : options
+  VERIFICATION_QUESTION ||--o{ ANSWER_STATE : answered_by
+  EXAM_SESSION ||--o{ ANSWER_STATE : answers
+  EXAM_SESSION ||--o{ TEST_VIOLATION : violations
+  EXAM_SESSION ||--o| INTEGRITY_SESSION : integrity
+  INTEGRITY_SESSION ||--o| INTEGRITY_RECEIPT : receipt
+  EXAM_SESSION ||--o| VERIFICATION_REPORT : report
+  VERIFICATION_REPORT ||--o{ SECTION_SCORE : section_scores
+  VERIFICATION_REPORT ||--o{ QUESTION_EVALUATION : evaluations
+  QUESTION_EVALUATION ||--o{ EVALUATION_NOTE : notes
+  VERIFICATION_QUESTION ||--o{ QUESTION_EVALUATION : evaluated

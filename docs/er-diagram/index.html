@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CareerForge AI ER Diagram</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">CareerForge AI</p>
+          <h1>Full App ER Diagram</h1>
+          <p class="subtitle">
+            Logical ER model of all modules. Use the zoom controls, then snapshot the diagram.
+          </p>
+        </div>
+        <div class="legend">
+          <div class="legend-row">
+            <span class="legend-label">Notation</span>
+            <span>Crow's Foot (Mermaid ER)</span>
+          </div>
+          <div class="legend-row">
+            <span class="legend-label">Scope</span>
+            <span>Resume, Cover Letter, ATS, AI Enhance, Interview, Verifier</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="diagram-card">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <label for="zoom" class="toolbar-label">Zoom</label>
+            <input id="zoom" type="range" min="0.4" max="1.6" step="0.05" value="1" />
+            <span id="zoom-value" class="toolbar-value">100%</span>
+          </div>
+          <div class="toolbar-group">
+            <button id="fit-button" type="button" class="ghost">Fit to width</button>
+            <button id="download-button" type="button" class="ghost">Download SVG</button>
+          </div>
+          <div id="status" class="status">Rendering diagram...</div>
+        </div>
+
+        <div id="diagram-container" class="diagram-container">
+          <div id="diagram-zoom" class="diagram-zoom">
+            <div id="diagram-output" class="diagram-output" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>Source file: diagram.mmd</span>
+        <span>Tip: Open this page in a browser and take a clean screenshot.</span>
+      </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

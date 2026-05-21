@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import {
   FileText,
@@ -16,11 +16,17 @@ import {
   ChevronDown,
   ArrowRight,
   FolderSearch,
+  Briefcase,
+  LogOut,
+  LogIn,
+  UserPlus,
+  PlusCircle,
 } from "lucide-react";
-  
+
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { MobileNav } from "./MobileNav";
+import { useAuth } from "@/components/shared/AuthProvider";
 
 export const featureItems = [
   {
@@ -72,6 +78,13 @@ export const featureItems = [
     description: "Live AI interview simulation with voice",
     gradient: "from-rose-500 to-pink-600",
   },
+  {
+    href: "/jobs",
+    label: "Job Board",
+    icon: Briefcase,
+    description: "Browse jobs and apply with your resume",
+    gradient: "from-blue-500 to-cyan-600",
+  },
 ];
 
 export const navItems = [
@@ -82,10 +95,14 @@ export const navItems = [
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [megaOpen, setMegaOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const megaTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const megaRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const isFeatureActive = featureItems.some(
     (f) => pathname === f.href || pathname.startsWith(f.href)
@@ -100,10 +117,27 @@ export default function Navbar() {
     megaTimeout.current = setTimeout(() => setMegaOpen(false), 150);
   };
 
+  const handleLogout = async () => {
+    await logout();
+    setUserMenuOpen(false);
+    router.push("/");
+  };
+
   useEffect(() => {
     return () => {
       if (megaTimeout.current) clearTimeout(megaTimeout.current);
     };
+  }, []);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   return (
@@ -212,19 +246,107 @@ export default function Navbar() {
             >
               Settings
             </Link>
+
+            {/* Employer-only: Post a Job shortcut */}
+            {user?.role === "employer" && (
+              <Link
+                href="/employer/jobs/new"
+                className={`relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  pathname === "/employer/jobs/new"
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <PlusCircle className="h-3.5 w-3.5" />
+                Post Job
+              </Link>
+            )}
           </nav>
 
           {/* Right side */}
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button
-              asChild
-              size="sm"
-              variant="glow"
-              className="hidden lg:inline-flex"
-            >
-              <Link href="/resume-builder">Get Started</Link>
-            </Button>
+
+            {/* Auth section */}
+            {loading ? (
+              <div className="hidden lg:block h-8 w-20 rounded-lg bg-surface-3 animate-pulse" />
+            ) : user ? (
+              /* Logged-in: user badge + dropdown */
+              <div ref={userMenuRef} className="relative hidden lg:block">
+                <button
+                  onClick={() => setUserMenuOpen((v) => !v)}
+                  className="flex items-center gap-2 rounded-lg border border-glass-border bg-glass-bg px-3 py-1.5 text-sm font-medium transition-all hover:border-primary/30 hover:bg-surface-5"
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      user.role === "employer" ? "bg-amber-400" : "bg-emerald-400"
+                    }`}
+                  />
+                  <span className="text-foreground">{user.username}</span>
+                  <span className="text-xs text-muted-foreground capitalize">
+                    ({user.role})
+                  </span>
+                  <ChevronDown
+                    className={`h-3 w-3 text-muted-foreground transition-transform ${
+                      userMenuOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-glass-border bg-mega-bg backdrop-blur-xl p-1 shadow-[0_20px_60px_var(--shadow-heavy)] animate-fade-in">
+                    <div className="px-3 py-2 border-b border-glass-border mb-1">
+                      <p className="text-xs text-muted-foreground">Signed in as</p>
+                      <p className="text-sm font-medium text-foreground truncate">{user.username}</p>
+                    </div>
+                    {user.role === "employer" && (
+                      <Link
+                        href="/employer/jobs"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
+                      >
+                        <Briefcase className="h-4 w-4" />
+                        My Job Postings
+                      </Link>
+                    )}
+                    {user.role === "candidate" && (
+                      <Link
+                        href="/my-applications"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
+                      >
+                        <Briefcase className="h-4 w-4" />
+                        My Applications
+                      </Link>
+                    )}
+                    <button
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Logged-out: Login + Sign Up buttons */
+              <div className="hidden lg:flex items-center gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/login">
+                    <LogIn className="h-3.5 w-3.5" />
+                    Login
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="glow">
+                  <Link href="/signup">
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Sign Up
+                  </Link>
+                </Button>
+              </div>
+            )}
+
             <Button
               variant="ghost"
               size="icon"
