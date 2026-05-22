@@ -81,7 +81,7 @@ export const featureItems = [
     gradient: "from-cyan-500 to-blue-600",
   },
   {
-    href: "/interview-prep",
+    href: "https://careerforge-ai-five.vercel.app/interview-prep",
     label: "Interview Prep",
     icon: Mic,
     description: "Live AI interview simulation with voice",
